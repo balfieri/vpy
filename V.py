@@ -107,6 +107,13 @@ def reg( name, w ):        decl( 'reg', name, w )
 def sreg( name, w ):       decl( 'reg signed', name, w )
 
 #-------------------------------------------
+# Common Verilog code wrappers
+#-------------------------------------------
+def always_at_posedge( _clk='' ):
+    if _clk == '': _clk = clk
+    P( f'always @( posedge {_clk} ) begin' )
+
+#-------------------------------------------
 # Replicate expression cnt times as a concatenation
 #-------------------------------------------
 def repl( expr, cnt ):
@@ -224,7 +231,7 @@ def iface_stage( iname, oname, sigs, pvld, prdy='', full_handshake=False, do_dpr
         if prdy != '': P(f'assign {iname}_{prdy} = !{oname}_pvld || {oname}_{prdy};' )
         for sig in sigs:
             reg( f'{oname}_{sig}', sigs[sig] )
-        P(f'always @( posedge {clk} ) begin' )
+        always_at_posedge()
         if pvld != '':
             P(f'    if ( !{reset_} ) begin' )
             P(f'        {oname}_{pvld} <= 0;' )
@@ -259,7 +266,7 @@ def iface_stage( iname, oname, sigs, pvld, prdy='', full_handshake=False, do_dpr
         P(f'wire {oname}_wr_0 = {iname}_pvld && ({iname}_prdy && ({oname}_pvld ? !{oname}_rd_0 :  {oname}_rd_0));' )
         P(f'wire {oname}_wr_1 = {iname}_pvld && ({iname}_prdy && ({oname}_pvld ?  {oname}_rd_0 : !{oname}_rd_0));' )
         P()
-        P(f'always @( posedge {clk} ) begin' )
+        always_at_posedge()
         P(f'    if ( !{reset_} ) begin' )
         P(f'        {oname}_pvld   <= 1\'b0;' )
         P(f'        {oname}_pvld_n <= 1\'b0;' )
@@ -271,7 +278,7 @@ def iface_stage( iname, oname, sigs, pvld, prdy='', full_handshake=False, do_dpr
         P(f'    end' )
         P(f'end' )
         P()
-        P(f'always @( posedge {clk} ) begin' )
+        always_at_posedge()
         P(f'    if ( {oname}_wr_0 ) begin' )
         iface_reg_assign( f'{oname}__0', f'{iname}', sigs )
         P(f'    end else begin' )
@@ -358,7 +365,7 @@ def dprint( msg, sigs, pvld, use_hex_w=16, with_clk=True, indent='' ):
 def dassert( expr, msg, pvld='', with_clk=True, indent='    ' ):
     if not vassert: return
     P(f'// synopsys translate_off' )
-    if with_clk: P(f'always @( posedge {clk} ) begin' )
+    if with_clk: always_at_posedge()
     reset_test = f'{reset_} === 1\'b1 && ' if with_clk else ''
     pvld_test  = f'({pvld}) && '             if pvld != '' else ''
     P(f'{indent}if ( {reset_test}{pvld_test}(({expr}) !== 1\'b1) ) begin' )
@@ -479,28 +486,28 @@ def wrapped_sub( r, w, a, b, c ):
 #---------------------------------------------------------
 # adder and subtractor are register values that can wrap
 #---------------------------------------------------------
-def adder( r, c, do_incr, init=0, incr=1, clk='', reset_='' ):
-    if clk == '': clk = clk
-    if reset_ == '': reset_ = reset_
+def adder( r, c, do_incr, init=0, incr=1, _clk='', _reset_='' ):
+    if _clk == '': _clk = clk
+    if _reset_ == '': _reset_ = reset_
     w = log2( c )
     reg( r, w )
     wrapped_add( f'{r}_p', w, r, incr, c )
-    P(f'always @( posedge {clk} ) begin' )
-    P(f'    if ( !{reset_} ) begin' )
+    always_at_posedge( _clk )
+    P(f'    if ( !{_reset_} ) begin' )
     P(f'        {r} <= {init};' )
     P(f'    end else if ( {do_incr} ) begin' )
     P(f'        {r} <= {r}_p;' )
     P(f'    end' )
     P(f'end' )
 
-def subtractor( r, c, do_decr, init=0, decr=1, clk='', reset_='' ):
-    if clk == '': clk = clk
-    if reset_ == '': reset_ = reset_
+def subtractor( r, c, do_decr, init=0, decr=1, _clk='', _reset_='' ):
+    if _clk == '': _clk = clk
+    if _reset_ == '': _reset_ = reset_
     w = log2( c )
     reg( r, w )
     wrapped_sub( f'{r}_p', w, r, decr, c )
-    P(f'always @( posedge {clk} ) begin' )
-    P(f'    if ( !{reset_} ) begin' )
+    always_at_posedge( _clk )
+    P(f'    if ( !{_reset_} ) begin' )
     P(f'        {r} <= {i};' )
     P(f'    end else if ( {do_decr} ) begin' )
     P(f'        {r} <= {r}_p;' )
@@ -786,7 +793,7 @@ def choose_eligible( r, elig_mask, cnt, preferred, gen_preferred=False, adv_pref
         wirea( r, w, f'({r}_p >= {cnt} ? ({r}_p - {cnt}) : {r}_p' )
     if gen_preferred:
         P(f'wire {elig_mask}_any_vld = |{elig_mask};' )
-        P(f'always @( posedge {clk} ) begin' )
+        always_at_posedge()
         P(f'    if ( !{reset_} ) begin' )
         P(f'        {preferred} <= 0;' )
         if adv_preferred: adv_preferred = f' && {adv_preferred}'
@@ -853,7 +860,7 @@ def resource_accounting( name, cnt, add_free_cnt=False, set_i_is_free_i=False ):
         wire( f'{name}_set_i', log2(cnt) )
     wire( f'{name}_clr_pvld', 1 )
     wire( f'{name}_clr_i', log2(cnt) )
-    P(f'always @( posedge {clk} ) begin' )
+    always_at_posedge()
     P(f'    if ( !{reset_} ) begin' )
     P(f'        {name}_in_use <= 0;' )
     P(f'    end else if ( {name}_set_pvld || {name}_clr_pvld ) begin' )
@@ -992,7 +999,7 @@ def fifo( sigs, pvld, prdy, depth, with_wr_prdy=True, prefix='d_', u_name='' ):
     P(f'                        .rd_pvld({d_pvld}), .rd_prdy({d_prdy}), .rd_pd('+'{'+f'{outs}'+'}) );' )
     if with_wr_prdy:
         P(f'// synopsys translate_off' )
-        P(f'always @( posedge {clk} ) begin' )
+        always_at_posedge()
         P(f'    if ( {reset_} === 1 && {pvld} !== 0 && {prdy} !== 1 ) begin' )
         P(f'        $display( "%0d: %m: ERROR: fifo wr_pvld=%d but wr_prdy=%d", $stime, {pvld}, {prdy} );' )
         P(f'        $fatal;' )
@@ -1025,7 +1032,7 @@ def make_fifo( module_name ):
         P(f'//' )
         reg( 'rd_pvld', 1 )
         reg( 'rd_pd', info['w'] )
-        P(f'always @( posedge {clk} ) begin' )
+        always_at_posedge()
         P(f'    rd_pvld <= wr_pvld;' )
         P(f'    if ( wr_pvld ) rd_pd <= wr_pd;' )
         P(f'end' )
@@ -1043,7 +1050,7 @@ def make_fifo( module_name ):
         reg( 'cnt', cnt_w )
         P(f'wire wr_pushing = wr_pvld && wr_prdy;' )
         P(f'wire rd_popping = rd_pvld && rd_prdy;' )
-        P(f'always @( posedge {clk} ) begin' )
+        always_at_posedge()
         P(f'    if ( !{reset_} ) begin' )
         P(f'        cnt <= 0;' )
         P(f'    end else if ( wr_pushing != rd_popping ) begin' )
@@ -1055,7 +1062,7 @@ def make_fifo( module_name ):
         P(f'//' ) 
         reg( 'wr_adr', a_w )
         P(f'assign wr_prdy = cnt != {depth} || rd_popping;' )
-        P(f'always @( posedge {clk} ) begin' )
+        always_at_posedge()
         P(f'    if ( !{reset_} ) begin' )
         P(f'        wr_adr <= 0;' )
         P(f'    end else if ( wr_pushing ) begin' )
@@ -1070,7 +1077,7 @@ def make_fifo( module_name ):
         P(f'// READ SIDE' )
         P(f'//' )
         reg( 'rd_adr', a_w )
-        P(f'always @( posedge {clk} ) begin' )
+        always_at_posedge()
         P(f'    if ( !{reset_} ) begin' )
         P(f'        rd_adr <= 0;' )
         P(f'    end else if ( rd_popping ) begin' )
@@ -1153,7 +1160,7 @@ def cache_tags( name, addr_w, tag_cnt, req_cnt, ref_cnt_max, decr_req_cnt=0, can
     P(f'//' )
     P(f'assign {name}__alloc_vld = {alloc_vld};' )
     binary_to_one_hot( f'{name}__avail_i', tag_cnt, f'{name}__allocs', f'{name}__alloc_vld' )
-    P(f'always @( posedge {clk} ) begin' )
+    always_at_posedge()
     for i in range(tag_cnt):
         addr_expr = f'{name}_req0_addr'  # TODO: needs to change if multiple requestors
         P(f'    if ( {name}__alloc_vld && {name}__avail_i == {i} ) {name}__addr{i} <= {addr_expr};' )
@@ -1179,7 +1186,7 @@ def cache_tags( name, addr_w, tag_cnt, req_cnt, ref_cnt_max, decr_req_cnt=0, can
     P()
     P(f'// {name} ref_cnt updates' )
     P(f'//' )
-    P(f'always @( posedge {clk} ) begin' )
+    always_at_posedge()
     P(f'    if ( !{reset_} ) begin' )
     for i in range(tag_cnt): 
         P(f'        {name}__ref_cnt{i} <= 0;' )
@@ -1200,7 +1207,7 @@ def cache_tags( name, addr_w, tag_cnt, req_cnt, ref_cnt_max, decr_req_cnt=0, can
     P()
     P(f'// {name} filled updates' )
     P(f'//' )
-    P(f'always @( posedge {clk} ) begin' )
+    always_at_posedge()
     P(f'    if ( {name}__alloc_vld || {name}_fill_pvld ) begin' )
     P(f'        {name}__filleds <= (~{name}__allocs & {name}__filleds) | {name}__fills;' )
     P(f'    end' )
@@ -1275,7 +1282,7 @@ def tb_clk( decl_clk=True, default_cycles_max=2000, perf_op_first=100, perf_op_l
     P(f'    join ' )
     P(f'end ' )
     P()
-    P(f'always @( posedge {clk} ) begin' )
+    always_at_posedge()
     P(f'    if ( cycle_cnt === cycles_max ) begin' )
     P(f'        $display( "%0d: ERROR: cycles_max exceeded", $stime );' )
     P(f'        $fatal;' )
@@ -1384,7 +1391,7 @@ def tb_randbits( sig, _bit_cnt ):
         and_mask = '' if this_bit_cnt == 32 else f' & ((1 << {this_bit_cnt})-1)' 
         P(f'reg [31:0] {sigi}_m_z;' )
         P(f'reg [31:0] {sigi}_m_w;' )
-        P(f'always @( posedge {clk} ) begin' )
+        always_at_posedge()
         P(f'    if ( !{reset_} ) begin' )
         z_init = '32\'h%x' % seed_z_init
         w_init = '32\'h%x' % seed_w_init
@@ -1420,7 +1427,7 @@ def tb_randomize_sigs( sigs, pvld, prdy='', cycle_cnt='', prefix='' ):
     tb_randbits( f'{prefix}_bits', bit_cnt )
 
     P(f'reg [31:0] {prefix}_cnt;' )
-    P(f'always @( posedge {clk} ) begin' )
+    always_at_posedge()
     P(f'    if ( !{reset_} ) begin' )
     P(f'        {pvld} <= 0;' )
     P(f'        {prefix}_cnt <= 0;' )
