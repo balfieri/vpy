@@ -37,11 +37,12 @@ def die( msg ):
 #
 cmd_en = True
 
-def cmd( c ):  
-    print( c )
+def cmd( c, echo=True, echo_stdout=False, can_die=True ):  
+    if echo: print( c )
     if cmd_en:
         info = subprocess.run( c, shell=True, text=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT )
-        if info.returncode != 0: die( f'command failed: {c}' )
+        if echo_stdout: print( info.stdout )
+        if can_die and info.returncode != 0: die( f'command failed: {c}' )
         return info.stdout
     else:
         return ''
