@@ -6,4 +6,6 @@ S.py is a Python module that has a few system helper functions unrelated to Veri
 
 import S
 import V
+
+V.reinit()
 ...
