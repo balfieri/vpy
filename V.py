@@ -78,6 +78,7 @@ def module_header_begin( mn ):
     in_module_header = True
 
 def decl( kind, name, w, is_io=False ):     
+    if w <= 0: S.die( f'{kind} {name} has width {w}' )
     global io
     if is_io:
         io.append( { 'name': name, 'kind': kind, 'width': w } )
@@ -85,6 +86,7 @@ def decl( kind, name, w, is_io=False ):
         P( kind + ' ' + (('[' + str(w-1) + ':' + '0] ') if w != 1 else '') + name + ';' )
 
 def decla( kind, name, w, v ):
+    if w <= 0: S.die( f'{kind} {name} has width {w}' )
     P( kind + ' ' + (('[' + str(w-1) + ':' + '0] ') if w != 1 else '') + name + ' = ' + f'{v}' + ';' )
 
 def input( name, w ):      
@@ -810,6 +812,7 @@ def choose_eligible( r, elig_mask, cnt, preferred, gen_preferred=False, adv_pref
 def choose_eligible_with_highest_prio( r, vlds, prios, prio_w ):
     P()
     cnt     = len(vlds)
+    choice_w = log2(cnt) if cnt > 1 else 1
     choices = [i for i in range(cnt)]
     i = 0
     while cnt > 1: 
@@ -825,9 +828,9 @@ def choose_eligible_with_highest_prio( r, vlds, prios, prio_w ):
                 which = f'{r}_which_{i}_{j}'
                 choice = f'{r}_choice_{i}_{j}'
                 wirea( vld, 1, f'{vlds[i0]} || {vlds[i1]}' )
-                wirea( which, 1, f'!{vlds[i0]} || ({prios[i1]} > {prios[i0]})' )
+                wirea( which, 1, f'!{vlds[i0]} || ({vlds[i1]} && {prios[i1]} > {prios[i0]})' )
                 wirea( prio, prio_w, f'{which} ? {prios[i1]} : {prios[i0]}' )
-                wirea( choice, log2(cnt), f'{which} ? {choices[i1]} : {choices[i0]}' )
+                wirea( choice, choice_w, f'{which} ? {choices[i1]} : {choices[i0]}' )
             else:
                 vld  = vlds[i0]
                 prio = prios[i0]
@@ -841,7 +844,8 @@ def choose_eligible_with_highest_prio( r, vlds, prios, prio_w ):
         i += 1
         cnt = len( choices )
     wirea(f'{r}_vld', 1, vlds[0] )
-    wirea(f'{r}_i', 1, choices[0] )
+    cnt = len(vlds)
+    wirea(f'{r}_i', choice_w, choices[0] )
 
 #-------------------------------------------
 # resource accounting for <cnt> resource slots
@@ -849,9 +853,10 @@ def choose_eligible_with_highest_prio( r, vlds, prios, prio_w ):
 def resource_accounting( name, cnt, add_free_cnt=False, set_i_is_free_i=False ):
     P()
     reg( f'{name}_in_use', cnt )
-    count_leading_ones( f'{name}_in_use', cnt )
+    reverse( f'{name}_in_use', cnt, f'{name}_in_use_r' )
+    count_leading_ones( f'{name}_in_use_r', cnt )
     wirea( f'{name}_free_pvld', 1, f'!(&{name}_in_use)' )
-    wirea( f'{name}_free_i', log2(cnt), f'{name}_in_use_ldo' )
+    wirea( f'{name}_free_i', log2(cnt), f'{name}_in_use_r_ldo' )
     if add_free_cnt: count_zeroes( f'{name}_in_use', cnt, f'{name}_free_cnt' )
     wire( f'{name}_set_pvld', 1 )
     if set_i_is_free_i:
@@ -1104,8 +1109,9 @@ def make_fifo( module_name ):
     P()
     P(f'endmodule // {module_name}' )
 
-def cache_tags( name, addr_w, tag_cnt, req_cnt, ref_cnt_max, decr_req_cnt=0, can_always_alloc=False ):
-    if (decr_req_cnt == 0): decr_req_cnt = req_cnt
+def cache_tags( name, addr_w, tag_cnt, req_cnt, ref_cnt_max, incr_ref_cnt_max=1, decr_req_cnt=0, can_always_alloc=False ):
+    if incr_ref_cnt_max < 1: S.die( f'cache_tags: incr_ref_cnt_max needs to be at least 1' )
+    if decr_req_cnt == 0: decr_req_cnt = req_cnt
 
     P()
     P(f'// {name} cache tags: addr_w={addr_w} tag_cnt={tag_cnt} req_cnt={req_cnt} ref_cnt_max={ref_cnt_max}' )
@@ -1152,6 +1158,7 @@ def cache_tags( name, addr_w, tag_cnt, req_cnt, ref_cnt_max, decr_req_cnt=0, can
         sigs = { 'addr': addr_w, 
                  'tag_i': tag_i_w,
                  'status': 2 }
+        if incr_ref_cnt_max > 1: sigs['incr_cnt'] = log2(incr_ref_cnt_max+1)
         iface_dprint( f'{name}_req{r}', sigs, f'{name}_req{r}_pvld' )
     wirea( f'{name}__hits', tag_cnt, hits )
 
@@ -1193,14 +1200,23 @@ def cache_tags( name, addr_w, tag_cnt, req_cnt, ref_cnt_max, decr_req_cnt=0, can
     P(f'    end else begin' )
     for i in range(tag_cnt): 
         bool_expr = f'{name}__allocs[{i}]'
-        sum_expr = f'{name}__ref_cnt{i} + {name}__allocs[{i}]'
+        sum_expr = f'{name}__ref_cnt{i}'
+        if incr_ref_cnt_max == 1: 
+            sum_expr += f' + {name}__allocs[{i}]'
         for r in range(req_cnt):
+            if incr_ref_cnt_max > 1:
+                dassert( f'!{name}_req{r}_pvld || {name}_req{r}_incr_cnt != 0', f'{name}_req{r}_incr_cnt must be at least 1', with_clk=False, indent='        ' )
             bool_expr += f' || {name}_req{r}__hit_one_hot[{i}]'
-            sum_expr  += f' + {name}_req{r}__hit_one_hot[{i}]'
+            if incr_ref_cnt_max == 1:
+                sum_expr  += f' + {name}_req{r}__hit_one_hot[{i}]'
+            else:
+                sum_expr  += f' + (({name}__allocs[{i}] || {name}_req{r}__hit_one_hot[{i}]) ? {name}_req{r}_incr_cnt : 0)'
         for r in range(decr_req_cnt):
             bool_expr += f' || {name}_decr{r}__one_hot[{i}]'
             sum_expr  += f' - {name}_decr{r}__one_hot[{i}]'
-        P(f'        if ( {bool_expr} ) {name}__ref_cnt{i} <= {sum_expr};' )
+        P(f'        if ( {bool_expr} ) begin' )
+        P(f'            {name}__ref_cnt{i} <= {sum_expr};' )
+        P(f'        end' )
     P(f'    end' )
     P(f'end' )
 
