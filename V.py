@@ -108,6 +108,83 @@ def swirea( name, w, v ):  decla( 'wire signed', name, w, v )
 def reg( name, w ):        decl( 'reg', name, w )
 def sreg( name, w ):       decl( 'reg signed', name, w )
 
+def module_header_end():
+    global in_module_header
+    global io
+    if not in_module_header: S.die( 'module_header_end() called while not already in a module header' )
+    ports_s = ''
+    io_s = ''
+    for i in range( len(io) ):
+        if io[i]['name'] != '':
+            if i != 0: ports_s = ', ' + ports_s
+            ports_s = io[i]['name'] + ports_s
+
+    if ports_s != '': ports_s = f'( {ports_s} )'
+
+    P()
+    P(f'module {module_name}{ports_s};' )
+    P()
+    for i in range( len(io) ):
+        if io[i]['name'] != '':
+            w = io[i]['width']
+            P( io[i]['kind'] + ' ' + (('[' + str(w-1) + ':' + '0] ') if w != 1 else '') + io[i]['name'] + ';' )
+        else:
+            P()
+    in_module_header = False
+    io = []
+
+def enum( prefix, names ):
+    w = log2( len(names) )
+    for i in range(len(names)):
+        wirea( f'{prefix}{names[i]}', w, i )
+
+def display( msg, sigs, use_hex_w=16, prefix='        ' ):
+    fmt = ''
+    vals = ''
+    for sig in sigs:
+        w = sigs[sig][0] if isinstance( sigs[sig], list ) else sigs[sig] 
+        if w == 0:
+            fmt += sig # just text
+        else:
+            if w > 0: 
+                fmt += f' {sig}='
+            else:
+               w = -w
+            if w >= use_hex_w:
+                wh = int( (w + 3) / 4 )
+                fmt  += f'0x%0{wh}h'
+            else:
+                fmt  += f'%-d'
+            vals += f', {sig}'
+    while len( msg ) < 30: msg += ' '
+    fmt = f'%0d: {msg}: {fmt}     in %m'
+    P( f'{prefix}$display( "{fmt}", $stime{vals} );' )
+
+def dprint( msg, sigs, pvld, use_hex_w=16, with_clk=True, indent='' ):
+    if not vdebug: return
+    P(f'// synopsys translate_off' )
+    prefix = indent
+    if with_clk: prefix += f'always @( posedge {clk} ) '
+    if pvld != '': prefix += f'if ( {pvld} ) '
+    display( msg, sigs, use_hex_w, prefix )
+    P(f'// synopsys translate_on' )
+
+def dassert( expr, msg, pvld='', with_clk=True, indent='    ' ):
+    if not vassert: return
+    P(f'// synopsys translate_off' )
+    if with_clk: always_at_posedge()
+    reset_test = f'{reset_} === 1\'b1 && ' if with_clk else ''
+    pvld_test  = f'({pvld}) && '             if pvld != '' else ''
+    P(f'{indent}if ( {reset_test}{pvld_test}(({expr}) !== 1\'b1) ) begin' )
+    P(f'{indent}    $display( "%0d: ERROR: {msg}", $stime );' )
+    P(f'{indent}    $fatal;' )
+    P(f'{indent}end' )
+    if with_clk: P(f'end' )
+    P(f'// synopsys translate_on' )
+   
+def dassert_no_x( expr, pvld='', with_clk=True, indent='    ' ):
+    dassert( f'^({expr}) !== 1\'bx', f'found an X in: {expr}', pvld, with_clk, indent )
+
 #-------------------------------------------
 # Common Verilog code wrappers
 #-------------------------------------------
@@ -320,168 +397,6 @@ def iface_dprint( name, sigs, pvld, prdy='', use_hex_w=16, with_clk=True, indent
     if prdy != '': vld += f' && {prdy}'
     dprint( name, isigs, vld, use_hex_w=16, with_clk=with_clk, indent=indent )
 
-def module_header_end():
-    global in_module_header
-    global io
-    if not in_module_header: S.die( 'module_header_end() called while not already in a module header' )
-    ports_s = ''
-    io_s = ''
-    for i in range( len(io) ):
-        if io[i]['name'] != '':
-            if i != 0: ports_s = ', ' + ports_s
-            ports_s = io[i]['name'] + ports_s
-
-    if ports_s != '': ports_s = f'( {ports_s} )'
-
-    P()
-    P(f'module {module_name}{ports_s};' )
-    P()
-    for i in range( len(io) ):
-        if io[i]['name'] != '':
-            w = io[i]['width']
-            P( io[i]['kind'] + ' ' + (('[' + str(w-1) + ':' + '0] ') if w != 1 else '') + io[i]['name'] + ';' )
-        else:
-            P()
-    in_module_header = False
-    io = []
-
-def enum( prefix, names ):
-    w = log2( len(names) )
-    for i in range(len(names)):
-        wirea( f'{prefix}{names[i]}', w, i )
-
-def display( msg, sigs, use_hex_w=16, prefix='        ' ):
-    fmt = ''
-    vals = ''
-    for sig in sigs:
-        w = sigs[sig][0] if isinstance( sigs[sig], list ) else sigs[sig] 
-        if w == 0:
-            fmt += sig # just text
-        else:
-            if w > 0: 
-                fmt += f' {sig}='
-            else:
-               w = -w
-            if w >= use_hex_w:
-                wh = int( (w + 3) / 4 )
-                fmt  += f'0x%0{wh}h'
-            else:
-                fmt  += f'%-d'
-            vals += f', {sig}'
-    while len( msg ) < 30: msg += ' '
-    fmt = f'%0d: {msg}: {fmt}     in %m'
-    P( f'{prefix}$display( "{fmt}", $stime{vals} );' )
-
-def dprint( msg, sigs, pvld, use_hex_w=16, with_clk=True, indent='' ):
-    if not vdebug: return
-    P(f'// synopsys translate_off' )
-    prefix = indent
-    if with_clk: prefix += f'always @( posedge {clk} ) '
-    if pvld != '': prefix += f'if ( {pvld} ) '
-    display( msg, sigs, use_hex_w, prefix )
-    P(f'// synopsys translate_on' )
-
-def dassert( expr, msg, pvld='', with_clk=True, indent='    ' ):
-    if not vassert: return
-    P(f'// synopsys translate_off' )
-    if with_clk: always_at_posedge()
-    reset_test = f'{reset_} === 1\'b1 && ' if with_clk else ''
-    pvld_test  = f'({pvld}) && '             if pvld != '' else ''
-    P(f'{indent}if ( {reset_test}{pvld_test}(({expr}) !== 1\'b1) ) begin' )
-    P(f'{indent}    $display( "%0d: ERROR: {msg}", $stime );' )
-    P(f'{indent}    $fatal;' )
-    P(f'{indent}end' )
-    if with_clk: P(f'end' )
-    P(f'// synopsys translate_on' )
-   
-def dassert_no_x( expr, pvld='', with_clk=True, indent='    ' ):
-    dassert( f'^({expr}) !== 1\'bx', f'found an X in: {expr}', pvld, with_clk, indent )
-
-#-------------------------------------------
-# For MUX, values need not be constants
-#-------------------------------------------
-def muxa( r, w, sel, vals, add_reg=True ):
-    sw = log2( len(vals) )
-    if len(vals) == 1:
-        if add_reg:
-            wirea( r, w, vals[0] )
-        else:
-            P( f'always @( * ) {r} = {vals[i]};' )
-    else:
-        if add_reg: P(f'reg [{w-1}:0] {r};' )
-        P(f'always @( * ) begin' )
-        P(f'    case( {sel} )' )
-        for i in range(len(vals)):
-            P(f'        {sw}\'d{i}: {r} = {vals[i]};' )
-        P(f'        default: {r} = {w}\'d0;' )
-        P(f'    endcase' )
-        P(f'end' )
-    return r
-
-def muxr( r, w, sel, add_reg, *vals ):
-    return muxa( r, w, sel, vals, add_reg )
-
-def mux( r, w, sel, *vals ):
-    return muxa( r, w, sel, vals )
-
-#-------------------------------------------
-# MUX_SUBWORD
-#
-# If stride is 0, stride is set to subword_w
-#
-# Subword 0 starts at lsb which defaults to 0.
-#-------------------------------------------
-def mux_subword( r, subword_w, sel, word, word_w, stride=0, lsb=0, add_reg=True ):
-    if stride == 0: stride = subword_w
-    vals = []
-    while lsb < word_w:
-        msb = lsb + subword_w - 1
-        if msb >= word_w: msb = word_w - 1
-        vals.append( f'{word}[{msb}:{lsb}]' )
-        lsb += stride
-    return muxr( r, subword_w, sel, add_reg, *vals )
-
-#-------------------------------------------
-# MUXN, multiple signals and sets of values are supported
-#-------------------------------------------
-def muxN( sigs, sel, vals, add_reg=True ):
-    sw = log2( len(vals) )
-    if add_reg:
-        for sig in sigs:
-            w = sigs[sig]
-            P(f'reg [{w-1}:0] {sig};' )
-        P(f'always @( * ) begin' )
-    P(f'    case( {sel} )' )
-    for i in range(len(vals)):
-        P(f'        {sw}\'d{i}: begin' )
-        j = 0
-        for sig in sigs:
-            P(f'            {sig} = {vals[i][j]};' )
-            j += 1
-        P(f'            end' )
-    P(f'        default: begin' )
-    for sig in sigs:
-        P(f'            {sig} = 0;' )
-    P(f'            end' )
-    P(f'    endcase' )
-    if add_reg:
-        P(f'end' )
-
-#-------------------------------------------
-# rotate bits left or right by N (useful for round-robin scheduling)
-#-------------------------------------------
-def rotate_left( r, w, n, bits ):
-    vals = []
-    for i in range( w ):
-        vals.append( bits if i == 0 else f'{{{bits}[{w-i-1}:0], {bits}[{w-1}:{w-i}]}}' )
-    return muxa( r, w, n, vals )
-
-def rotate_right( r, w, n, bits ):
-    vals = []
-    for i in range( w ):
-        vals.append( bits if i == 0 else f'{{{bits}[{w-1}:{w-i}], {bits}[{w-i-1}:0]}}' )
-    return muxa( r, w, n, vals )
-
 #---------------------------------------------------------
 # wrapped add and sub (combinational)
 #
@@ -632,6 +547,168 @@ def cla( r, w, a, b, cin ):
     for j in range(w):
         P(f'assign {r}_S[{j}] = {r}_C{j} ^ {r}_s{h[j]}_G{j};' )
     return f'{r}_S'
+
+#-------------------------------------------
+# compute integer log2( x ) in hardware
+#-------------------------------------------
+def vlog2( x, x_w ):
+    cnt_w = value_bitwidth( x_w )
+    ldz = count_leading_zeroes( x, x_w )
+    P(f'wire [{cnt_w-1}:0] {x}_lg2 = {cnt_w}\'d{x_w-1} - {ldz};' )
+    
+#-------------------------------------------
+# fixed-point resize
+#-------------------------------------------
+def fp_resize( fp1, r, is_signed, int1_w, frac1_w, intr_w, fracr_w ):
+    lsb1 = 0 if fracr_w >= frac1_w else frac1_w-fracr_w
+    msb1 = lsb1 + fracr_w
+    msb1 += int1_w-1 if intr_w >= int1_w else intr_w-1
+    zeroes = '' if fracr_w <= frac1_w else f',{fracr_w-frac1_w}\'b0'
+    signs = ''
+    if is_signed:
+        if intr_w <= int1_w:
+            msb1 += 1
+        else:
+            signs = f'{{{intr_w-int1_w+1}{{{fp1}[{int1_w+frac1_w}]}}}},'
+    expr = '' if zeroes == '' and signs == '' else '{'
+    expr += signs
+    expr += f'{fp1}[{msb1}:{lsb1}]'
+    expr += zeroes
+    if zeroes != '' or signs != '': expr += '}'
+    wirea( r, int(is_signed)+intr_w+fracr_w, expr )
+
+#-------------------------------------------
+# fixed-point left-shift using array of possible discrete lshs with optional resizing
+#-------------------------------------------
+def fp_lsha( fp1, sel, lshs, r, is_signed, int1_w, frac1_w, intr_w, fracr_w ):
+    vals = []
+    w1 = int(is_signed) + int1_w + frac1_w
+    wr = int(is_signed) + intr_w + fracr_w
+    for lsh in lshs:
+        if int1_w == intr_w and frac1_w == fracr_w:
+            wirea( f'{r}__{lsh}', wr, fp1 if lsh == 0 else f'{fp1} << {lsh}' )
+        else:
+            wirea( f'{r}__{lsh}_p', w1+lsh, fp1 if lsh == 0 else f'{fp1} << {lsh}' )
+            fp_resize( f'{r}__{lsh}_p', f'{r}__{lsh}', is_signed, int1_w+lsh, frac1_w, intr_w, fracr_w )
+        vals.append( f'{r}__{lsh}' )
+    muxa( r, wr, sel, vals )
+
+#-------------------------------------------
+# fixed-point left-shift with optional resizing
+#-------------------------------------------
+def fp_lsh( fp1, lsh, lsh_max, r, is_signed, int1_w, frac1_w, intr_w, fracr_w ):
+    lshs = [i for i in range(lsh_max+1)]  # all possible left-shifts from 0 to lsh_max
+    fp_lsha( fp1, lsh, lshs, r, is_signed, int1_w, frac1_w, intr_w, fracr_w )
+
+#-------------------------------------------
+# fixed-point multiply with optional resizing and/or left-shift
+#-------------------------------------------
+def fp_mul( fp1, fp2, r, is_signed, int1_w, frac1_w, int2_w=-1, frac2_w=-1, intr_w=-1, fracr_w=-1, extra_lsh='', extra_lsh_max=0 ):
+    if int2_w == -1: int2_w = int1_w
+    if frac2_w == -1: frac2_w = frac1_w
+    if intr_w == -1: intr_w = int1_w
+    if fracr_w == -1: fracr_w = frac1_w
+    if is_signed:
+        wirea( f'{r}__{fp1}__is_neg', 1, f'{fp1}[{int1_w+frac1_w}]' )
+        wirea( f'{r}__{fp2}__is_neg', 1, f'{fp2}[{int2_w+frac2_w}]' )
+        wirea( f'{r}__is_neg', 1, f'{r}__{fp1}__is_neg ^ {r}__{fp2}__is_neg' )
+        wirea( f'{r}__{fp1}__u', int1_w+frac1_w, f'{r}__{fp1}__is_neg ? (~{fp1} + 1) : {fp1}' )
+        wirea( f'{r}__{fp2}__u', int2_w+frac2_w, f'{r}__{fp2}__is_neg ? (~{fp2} + 1) : {fp2}' )
+        fp1 = f'{r}__{fp1}__u'
+        fp2 = f'{r}__{fp2}__u'
+    wirea( f'{r}__raw', int1_w+int2_w+frac1_w+frac2_w, f'{fp1} * {fp2}' )
+    __a = '__a' if is_signed else ''
+    if extra_lsh == '':
+        fp_resize( f'{r}__raw', f'{r}{__a}', False, int1_w+int2_w, frac1_w+frac2_w, intr_w, fracr_w )
+    else:
+        fp_lsh( f'{r}__raw', extra_lsh, extra_lsh_max, f'{r}{__a}', False, int1_w+int2_w, frac1_w+frac2_w, intr_w, fracr_w )
+    if is_signed:
+        wirea( r, 1+intr_w+fracr_w, f'{r}__is_neg ? {{1\'b1, ~{r}__a + {intr_w+fracr_w}\'d1}} : {{1\'b0, {r}__a}}' )
+
+#-------------------------------------------
+# For MUX, values need not be constants
+#-------------------------------------------
+def muxa( r, w, sel, vals, add_reg=True ):
+    sw = log2( len(vals) )
+    if len(vals) == 1:
+        if add_reg:
+            wirea( r, w, vals[0] )
+        else:
+            P( f'always @( * ) {r} = {vals[i]};' )
+    else:
+        if add_reg: P(f'reg [{w-1}:0] {r};' )
+        P(f'always @( * ) begin' )
+        P(f'    case( {sel} )' )
+        for i in range(len(vals)):
+            P(f'        {sw}\'d{i}: {r} = {vals[i]};' )
+        P(f'        default: {r} = {w}\'d0;' )
+        P(f'    endcase' )
+        P(f'end' )
+    return r
+
+def muxr( r, w, sel, add_reg, *vals ):
+    return muxa( r, w, sel, vals, add_reg )
+
+def mux( r, w, sel, *vals ):
+    return muxa( r, w, sel, vals )
+
+#-------------------------------------------
+# MUX_SUBWORD
+#
+# If stride is 0, stride is set to subword_w
+#
+# Subword 0 starts at lsb which defaults to 0.
+#-------------------------------------------
+def mux_subword( r, subword_w, sel, word, word_w, stride=0, lsb=0, add_reg=True ):
+    if stride == 0: stride = subword_w
+    vals = []
+    while lsb < word_w:
+        msb = lsb + subword_w - 1
+        if msb >= word_w: msb = word_w - 1
+        vals.append( f'{word}[{msb}:{lsb}]' )
+        lsb += stride
+    return muxr( r, subword_w, sel, add_reg, *vals )
+
+#-------------------------------------------
+# MUXN, multiple signals and sets of values are supported
+#-------------------------------------------
+def muxN( sigs, sel, vals, add_reg=True ):
+    sw = log2( len(vals) )
+    if add_reg:
+        for sig in sigs:
+            w = sigs[sig]
+            P(f'reg [{w-1}:0] {sig};' )
+        P(f'always @( * ) begin' )
+    P(f'    case( {sel} )' )
+    for i in range(len(vals)):
+        P(f'        {sw}\'d{i}: begin' )
+        j = 0
+        for sig in sigs:
+            P(f'            {sig} = {vals[i][j]};' )
+            j += 1
+        P(f'            end' )
+    P(f'        default: begin' )
+    for sig in sigs:
+        P(f'            {sig} = 0;' )
+    P(f'            end' )
+    P(f'    endcase' )
+    if add_reg:
+        P(f'end' )
+
+#-------------------------------------------
+# rotate bits left or right by N (useful for round-robin scheduling)
+#-------------------------------------------
+def rotate_left( r, w, n, bits ):
+    vals = []
+    for i in range( w ):
+        vals.append( bits if i == 0 else f'{{{bits}[{w-i-1}:0], {bits}[{w-1}:{w-i}]}}' )
+    return muxa( r, w, n, vals )
+
+def rotate_right( r, w, n, bits ):
+    vals = []
+    for i in range( w ):
+        vals.append( bits if i == 0 else f'{{{bits}[{w-1}:{w-i}], {bits}[{w-i-1}:0]}}' )
+    return muxa( r, w, n, vals )
 
 #-------------------------------------------
 # count zeroes/ones
@@ -832,83 +909,6 @@ def uncollapse( mask, indexes, index_cnt, vals, r ):
         results.append( vr )    
         if r != '': wirea( f'{r}_{val}', index_cnt*w, vr )
     return results
-
-#-------------------------------------------
-# compute integer log2( x ) in hardware
-#-------------------------------------------
-def vlog2( x, x_w ):
-    cnt_w = value_bitwidth( x_w )
-    ldz = count_leading_zeroes( x, x_w )
-    P(f'wire [{cnt_w-1}:0] {x}_lg2 = {cnt_w}\'d{x_w-1} - {ldz};' )
-    
-#-------------------------------------------
-# fixed-point resize
-#-------------------------------------------
-def fp_resize( fp1, r, is_signed, int1_w, frac1_w, intr_w, fracr_w ):
-    lsb1 = 0 if fracr_w >= frac1_w else frac1_w-fracr_w
-    msb1 = lsb1 + fracr_w
-    msb1 += int1_w-1 if intr_w >= int1_w else intr_w-1
-    zeroes = '' if fracr_w <= frac1_w else f',{fracr_w-frac1_w}\'b0'
-    signs = ''
-    if is_signed:
-        if intr_w <= int1_w:
-            msb1 += 1
-        else:
-            signs = f'{{{intr_w-int1_w+1}{{{fp1}[{int1_w+frac1_w}]}}}},'
-    expr = '' if zeroes == '' and signs == '' else '{'
-    expr += signs
-    expr += f'{fp1}[{msb1}:{lsb1}]'
-    expr += zeroes
-    if zeroes != '' or signs != '': expr += '}'
-    wirea( r, int(is_signed)+intr_w+fracr_w, expr )
-
-#-------------------------------------------
-# fixed-point left-shift using array of possible discrete lshs with optional resizing
-#-------------------------------------------
-def fp_lsha( fp1, sel, lshs, r, is_signed, int1_w, frac1_w, intr_w, fracr_w ):
-    vals = []
-    w1 = int(is_signed) + int1_w + frac1_w
-    wr = int(is_signed) + intr_w + fracr_w
-    for lsh in lshs:
-        if int1_w == intr_w and frac1_w == fracr_w:
-            wirea( f'{r}__{lsh}', wr, fp1 if lsh == 0 else f'{fp1} << {lsh}' )
-        else:
-            wirea( f'{r}__{lsh}_p', w1+lsh, fp1 if lsh == 0 else f'{fp1} << {lsh}' )
-            fp_resize( f'{r}__{lsh}_p', f'{r}__{lsh}', is_signed, int1_w+lsh, frac1_w, intr_w, fracr_w )
-        vals.append( f'{r}__{lsh}' )
-    muxa( r, wr, sel, vals )
-
-#-------------------------------------------
-# fixed-point left-shift with optional resizing
-#-------------------------------------------
-def fp_lsh( fp1, lsh, lsh_max, r, is_signed, int1_w, frac1_w, intr_w, fracr_w ):
-    lshs = [i for i in range(lsh_max+1)]  # all possible left-shifts from 0 to lsh_max
-    fp_lsha( fp1, lsh, lshs, r, is_signed, int1_w, frac1_w, intr_w, fracr_w )
-
-#-------------------------------------------
-# fixed-point multiply with optional resizing and/or left-shift
-#-------------------------------------------
-def fp_mul( fp1, fp2, r, is_signed, int1_w, frac1_w, int2_w=-1, frac2_w=-1, intr_w=-1, fracr_w=-1, extra_lsh='', extra_lsh_max=0 ):
-    if int2_w == -1: int2_w = int1_w
-    if frac2_w == -1: frac2_w = frac1_w
-    if intr_w == -1: intr_w = int1_w
-    if fracr_w == -1: fracr_w = frac1_w
-    if is_signed:
-        wirea( f'{r}__{fp1}__is_neg', 1, f'{fp1}[{int1_w+frac1_w}]' )
-        wirea( f'{r}__{fp2}__is_neg', 1, f'{fp2}[{int2_w+frac2_w}]' )
-        wirea( f'{r}__is_neg', 1, f'{r}__{fp1}__is_neg ^ {r}__{fp2}__is_neg' )
-        wirea( f'{r}__{fp1}__u', int1_w+frac1_w, f'{r}__{fp1}__is_neg ? (~{fp1} + 1) : {fp1}' )
-        wirea( f'{r}__{fp2}__u', int2_w+frac2_w, f'{r}__{fp2}__is_neg ? (~{fp2} + 1) : {fp2}' )
-        fp1 = f'{r}__{fp1}__u'
-        fp2 = f'{r}__{fp2}__u'
-    wirea( f'{r}__raw', int1_w+int2_w+frac1_w+frac2_w, f'{fp1} * {fp2}' )
-    __a = '__a' if is_signed else ''
-    if extra_lsh == '':
-        fp_resize( f'{r}__raw', f'{r}{__a}', False, int1_w+int2_w, frac1_w+frac2_w, intr_w, fracr_w )
-    else:
-        fp_lsh( f'{r}__raw', extra_lsh, extra_lsh_max, f'{r}{__a}', False, int1_w+int2_w, frac1_w+frac2_w, intr_w, fracr_w )
-    if is_signed:
-        wirea( r, 1+intr_w+fracr_w, f'{r}__is_neg ? {{1\'b1, ~{r}__a + {intr_w+fracr_w}\'d1}} : {{1\'b0, {r}__a}}' )
 
 #-------------------------------------------
 # choose eligible from mask and preferred 
