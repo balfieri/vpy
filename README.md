@@ -157,7 +157,6 @@ def resource_accounting( name, cnt, add_free_cnt=False, set_i_is_free_i=False ):
 def rom_1d( i0, names, entries, nesting=0, result_w=None ):
 def rom_2d( i0, i1, names, entries, nesting=0, result_w=None ):
 def fifo( sigs, pvld, prdy, depth, with_wr_prdy=True, prefix='d_', u_name='' ):
-def make_fifo( module_name ):
 def cache_tags( name, addr_w, tag_cnt, req_cnt, ref_cnt_max, incr_ref_cnt_max=1, decr_req_cnt=0, can_always_alloc=False ):
 def cache_filled_check( name, tag_i, r, tag_cnt, add_reg=True ):
 ```
