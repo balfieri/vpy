@@ -51,15 +51,6 @@ def module_header_end():
 def module_footer( mn ):
 ```
 
-## Concatenation
-
-```python
-def repl( expr, cnt ):
-def reverse( bits, w, rbits='' ):
-def concata( vals, w, r='', reverse=True ):
-def unconcata( combined, cnt, w, r='', reverse=True ):
-```
-
 ## Debug
 
 ```python
@@ -92,6 +83,15 @@ def iface_split( iname, oname, sigs, do_decl=True ):
 def iface_stage( iname, oname, sigs, pvld, prdy='', full_handshake=False, do_dprint=True ):
 def iface_stageN( p, sigs, pvld, prdy='' ):
 def iface_dprint( name, sigs, pvld, prdy='', use_hex_w=16, with_clk=True, indent='' ):
+```
+
+## Concatenation
+
+```python
+def repl( expr, cnt ):
+def reverse( bits, w, rbits='' ):
+def concata( vals, w, r='', reverse=True ):
+def unconcata( combined, cnt, w, r='', reverse=True ):
 ```
 
 ## Muxing and Shifting
