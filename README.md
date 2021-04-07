@@ -104,20 +104,31 @@ def mux_subword( r, subword_w, sel, word, word_w, stride=0, lsb=0, add_reg=True 
 def muxN( sigs, sel, vals, add_reg=True ):
 def rotate_left( r, w, n, bits ):
 def rotate_right( r, w, n, bits ):
-def wrapped_add( r, w, a, b, c ):
-def wrapped_sub( r, w, a, b, c ):
-def adder( r, c, do_incr, init=0, incr=1, _clk='', _reset_='' ):
+def collapse( mask, mask_w, r, vals={}, gen_indexes=True ):
+def uncollapse( mask, indexes, index_cnt, vals, r ):
 ```
 
 ## Integer Math
 
 ```python
+def wrapped_add( r, w, a, b, c ):
+def wrapped_sub( r, w, a, b, c ):
+def adder( r, c, do_incr, init=0, incr=1, _clk='', _reset_='' ):
 def subtractor( r, c, do_decr, init=0, decr=1, _clk='', _reset_='' ):
 def cla( r, w, a, b, cin ):
 def vlog2( x, x_w ):
 ```
 
-## LogN Tree Logic
+## Fixed-Point Math
+
+```python
+def fp_resize( fp1, r, is_signed, int1_w, frac1_w, intr_w, fracr_w ):
+def fp_lsha( fp1, sel, lshs, r, is_signed, int1_w, frac1_w, intr_w, fracr_w ):
+def fp_lsh( fp1, lsh, lsh_max, r, is_signed, int1_w, frac1_w, intr_w, fracr_w ):
+def fp_mul( fp1, fp2, r, is_signed, int1_w, frac1_w, int2_w=-1, frac2_w=-1, intr_w=-1, fracr_w=-1, extra_lsh='', extra_lsh_max=0 ):
+```
+
+## LogN-Tree-Based Logic
 
 ```python
 def count_zeroes( x, x_w, r='' ):
@@ -129,15 +140,6 @@ def binary_to_one_hot( b, mask_w, r='', pvld='' ):
 def one_hot_to_binary( mask, mask_w, r, r_any_vld='' ):
 def collapse( mask, mask_w, r, vals={}, gen_indexes=True ):
 def uncollapse( mask, indexes, index_cnt, vals, r ):
-```
-
-## Fixed-Point Math
-
-```python
-def fp_resize( fp1, r, is_signed, int1_w, frac1_w, intr_w, fracr_w ):
-def fp_lsha( fp1, sel, lshs, r, is_signed, int1_w, frac1_w, intr_w, fracr_w ):
-def fp_lsh( fp1, lsh, lsh_max, r, is_signed, int1_w, frac1_w, intr_w, fracr_w ):
-def fp_mul( fp1, fp2, r, is_signed, int1_w, frac1_w, int2_w=-1, frac2_w=-1, intr_w=-1, fracr_w=-1, extra_lsh='', extra_lsh_max=0 ):
 ```
 
 ## Arbiters
