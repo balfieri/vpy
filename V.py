@@ -132,11 +132,12 @@ def reverse( bits, w, rbits='' ):
     return rbits
 
 #-------------------------------------------
-# Concatenate expressions stored in an array.
+# Concatenate expressions with width w stored in an array.
 # Optionally generate a wire assignment.
-# Optionally concatenate in reverse order, which is common for eligible masks.
+# By default, concatenate in reverse order, 
+# which is common for eligible masks (vals[0] needs to be the LSB).
 #-------------------------------------------
-def concata( vals, r='', reverse=False ):
+def concata( vals, w, r='', reverse=True ):
     expr = ''
     for v in vals:
         if reverse:
@@ -145,9 +146,25 @@ def concata( vals, r='', reverse=False ):
         else:
             if expr != '': expr += ', '
             expr += v
-    expr = f'{{{expr}}}'
-    if r != '': wirea( r, len(vals), expr )
+    expr = f'{{{expr}}}' if len(vals) > 1 else expr
+    if r != '': wirea( r, w*len(vals), expr )
     return expr
+
+#-------------------------------------------
+# Un-concatenate a single signal (bus) into a bunch of sub values.
+# Optionally generates multiple wire assignments.
+# By default, unconcatenates in reverse order (i.e., LSBs are vals[0])
+#-------------------------------------------
+def unconcata( combined, cnt, w, r='', reverse=True ):
+    vals = []
+    for i in range(cnt):
+        ii = i if reverse else cnt-1-i
+        lsb = i*w
+        msb = lsb+w-1
+        v = f'{combined}[{msb}:{lsb}]'
+        vals.append( v )
+        if r != '': wirea( f'{r}{i}', w, v )
+    return vals
 
 def iface_width( sigs ):
     w = 0
@@ -385,15 +402,20 @@ def dassert_no_x( expr, pvld='', with_clk=True, indent='    ' ):
 #-------------------------------------------
 def muxa( r, w, sel, vals, add_reg=True ):
     sw = log2( len(vals) )
-    if add_reg:
-        P(f'reg [{w-1}:0] {r};' )
-    P(f'always @( * ) begin' )
-    P(f'    case( {sel} )' )
-    for i in range(len(vals)):
-        P(f'        {sw}\'d{i}: {r} = {vals[i]};' )
-    P(f'        default: {r} = {w}\'d0;' )
-    P(f'    endcase' )
-    P(f'end' )
+    if len(vals) == 1:
+        if add_reg:
+            wirea( r, w, vals[0] )
+        else:
+            P( f'always @( * ) {r} = {vals[i]};' )
+    else:
+        if add_reg: P(f'reg [{w-1}:0] {r};' )
+        P(f'always @( * ) begin' )
+        P(f'    case( {sel} )' )
+        for i in range(len(vals)):
+            P(f'        {sw}\'d{i}: {r} = {vals[i]};' )
+        P(f'        default: {r} = {w}\'d0;' )
+        P(f'    endcase' )
+        P(f'end' )
     return r
 
 def muxr( r, w, sel, add_reg, *vals ):
@@ -671,7 +693,7 @@ def count_leading_ones( x, x_w, add_reg=True, suff='_ldo' ):
 #-------------------------------------------
 def is_one_hot( mask, mask_w, r='' ):
     ioh = count_ones( mask, mask_w ) + ' <= 1'
-    if r != '': V.wirea( r, 1, ioh )
+    if r != '': wirea( r, 1, ioh )
     return ioh
 
 #-------------------------------------------
@@ -698,6 +720,118 @@ def one_hot_to_binary( mask, mask_w, r, r_any_vld='' ):
     wirea( r, r_w, expr )
     if r_any_vld != '': wirea( r_any_vld, 1, f'|{mask}' )
     dassert( is_one_hot( mask, mask_w ), f'{mask} should have no bits set or exactly one bit set' )
+
+#-------------------------------------------
+# Collapse 1 bits from a mask.
+# For example, if the mask is 4'b1010, the result will be 4'0011.
+# If gen_indexes is True (default), then we also produce a collapsed set of 
+# mask indexes, such as {xxx, xxx, 2'd3, 2'd1} in this example, which 
+# will be needed if you decide to use uncollapse() below.
+# Further you may supply other sets of values to get collapsed using
+# a dictionary, such as the following 32-bit addr and 4-bit x values:
+#      vals = { 'addr': [ 32, '{addr3, addr2, addr1, addr0}' ],
+#               'x':    [  4, '{x3, x2, x1, x0}' ] }
+# then results will be (in this example):
+#      {r}_vlds    = 4'b0011
+#      {r}_indexes = {xxx, xxx,  2'd3,  2'd1}
+#      {r}_addr    = {xxx, xxx, addr3, addr1} 
+#      {r}_x       = {xxx, xxx,    x3,    x1}
+#
+# You can use concata() to take a list of values and concatenate them into 
+# the single signal such as the ones shown.
+# 
+# You can also use unconcata() to take a single bus and split it into 
+# multiple signals.
+#-------------------------------------------
+def collapse( mask, mask_w, r, vals={}, gen_indexes=True ):
+    if 'vlds' in vals: S.die( f':collapse: {r} vals may not have an entry called "vlds"' )
+    _vals = {}
+    for val in vals:
+        w = vals[val][0]
+        s = vals[val][1]
+        _vals[val] = [w, []]
+        for i in range(mask_w):
+            lsb = i*w
+            msb = lsb + w - 1
+            _vals[val][1].append( f'{mask}[{i}] ? {s}[{msb}:{lsb}] : {w}\'d0' )
+
+    _vals['vlds'] = [ 1, [ f'{mask}[{i}]' for i in range(mask_w) ] ]
+    if gen_indexes:
+        if 'indexes' in vals: S.die( f'collapse: {r} gen_indexes=True is allowed only if there is no "indexes" in vals={vals}' )
+        index_w = max( 1, log2( mask_w ) )
+        _vals['indexes'] = [ index_w, [ f'{mask}[{i}] ? {index_w}\'d{i} : {index_w}\'d0' for i in range(mask_w) ] ]
+
+    vld_cnts = _vals['vlds'][1].copy()
+    vld_cnt_w = 1
+    i = 0
+    cnt = mask_w
+    while cnt > 1: 
+        vld_cnt_max = (1 << vld_cnt_w) - 1
+        new_vld_cnts = []
+        new_vals = {}
+        for val in _vals: 
+            new_vals[val] = [ _vals[val][0], [] ]
+        for j in range((cnt+1) >> 1):
+            i0 = j*2 + 0
+            i1 = j*2 + 1
+            if i1 < cnt:
+                new_vld_cnt = f'{r}_vld_cnt_{i}_{j}'
+                wirea( new_vld_cnt, vld_cnt_w+1, f'{vld_cnts[i0]} + {vld_cnts[i1]}' )
+                new_vld_cnts.append( new_vld_cnt )
+                for val in _vals:
+                    w = _vals[val][0]
+                    opnd0 = _vals[val][1][i0]
+                    opnd1 = _vals[val][1][i1]
+                    w_times = f'{w}*' if w > 1 else ''
+                    expr  = f'{opnd0} | ({opnd1} << ({w_times}{vld_cnts[i0]}))'
+                    wirea( f'{r}_{val}_{i}_{j}', w*(vld_cnt_max+1), expr )
+                    new_vals[val][1].append( f'{r}_{val}_{i}_{j}' )
+            else:
+                new_vld_cnts.append( vld_cnts[i0] )
+                for val in _vals:
+                    new_vals[val][1].append( _vals[val][1][i0] )
+        vld_cnts = new_vld_cnts
+        _vals = new_vals
+        i += 1
+        cnt = len( vld_cnts )
+        vld_cnt_w += 1
+    for val in _vals:
+        w = _vals[val][0]
+        wirea(f'{r}_{val}', mask_w*w, _vals[val][1][0] )
+
+#-------------------------------------------
+# Un-collapse previous collapsed values using the collapsed mask and mask indexes.
+# For example, say we have mask_indexes = {xx, xx, 2'd3, 2'd1} and we want to uncollapse:
+#      vals = { 'addr': [32, '{xxx, xxx, addr3, addr1}' ]
+#                'x':   [ 4, '{xxx, xxx,    x3,    x1}' ] }
+# then results will be (in this example):
+#      {r}_addr = {addr3, xxx, addr1, xxx}
+#      {r}_x    = {   x3, xxx,   x1,  xxx}
+#
+# It is up to the caller to not look at sub-values that can't be valid.
+# That usually means looking at the pre-collapsed mask (4'b1010 in this example).
+#
+# See prior comments about concata() and unconcata().
+#-------------------------------------------
+def uncollapse( mask, indexes, index_cnt, vals, r ):
+    index_w = max( 1, log2(index_cnt) )
+    results = []
+    for val in vals:
+        w = vals[val][0]
+        sig = vals[val][1]
+        vr = ''
+        for i in range(index_cnt):
+            lsb = i*w
+            msb = lsb + w - 1
+            ilsb = i*index_w
+            imsb = ilsb + index_w - 1
+            idx = f'{indexes}[{imsb}:{ilsb}]'
+            v = f'{sig}[{msb}:{lsb}]'
+            if i != 0: vr += f' | '
+            vr += f'({mask}[{i}] ? ({v} << ({idx}*{w})) : 0)'
+        results.append( vr )    
+        if r != '': wirea( f'{r}_{val}', index_cnt*w, vr )
+    return results
 
 #-------------------------------------------
 # compute integer log2( x ) in hardware
@@ -846,6 +980,40 @@ def choose_eligible_with_highest_prio( r, vlds, prios, prio_w ):
     wirea(f'{r}_vld', 1, vlds[0] )
     cnt = len(vlds)
     wirea(f'{r}_i', choice_w, choices[0] )
+
+#-------------------------------------------
+# choose multiple eligibles from elig_mask and 
+# assign them to requestors from req_mask.
+#
+# results:
+#     {r}_elig_vlds        is a mask of all eligibles that were successfully assigned
+#     {r}_elig_req_indexes holds the indexes of the requestors to which each eligible was assigned (when elig_vlds bit is set)
+#     {r}_req_vlds         is a mask of all requestors that were assigned 
+#     {r}_req_elig_indexes holds the indexes of the eligibles that were assigned to requestors (when req_vlds bit is set) 
+#
+# We collapse the eligibles and collapse the requestors, then assign as much as we can.
+#-------------------------------------------
+def choose_eligibles( r, elig_mask, elig_cnt, preferred, req_mask, req_cnt, gen_preferred=False ):
+    if not is_pow2( elig_cnt ): S.die( f'choose_eligibles: elig_cnt={elig_cnt} must be a power-of-2 for now' )
+    elig_index_w = max(1, log2(elig_cnt))
+    req_index_w  = max(1, log2(req_cnt))
+    pelig_mask = rotate_right( f'{r}_pelig_mask', elig_cnt, preferred, elig_mask )
+    collapse( pelig_mask, elig_cnt, f'{r}_collapsed_pelig' )
+    collapse( req_mask,   req_cnt, f'{r}_collapsed_req' )
+    used_w = min( elig_cnt, req_cnt )
+    wirea( f'{r}_collapsed_used', used_w, f'{r}_collapsed_pelig_vlds & {r}_collapsed_req_vlds' )
+    wirea( f'{r}_collapsed_pelig_used', elig_cnt, f'{r}_collapsed_used' )
+    wirea( f'{r}_collapsed_req_used',  req_cnt,  f'{r}_collapsed_used' )
+    uncollapse( f'{r}_collapsed_req_vlds', f'{r}_collapsed_req_indexes', req_cnt, { 'vlds': [1, f'{r}_collapsed_req_used'] }, f'{r}_req' )
+    wirea( f'{r}_collapsed_req_pelig_indexes', req_cnt*elig_index_w, f'{r}_collapsed_pelig_indexes' )
+    uncollapse( f'{r}_collapsed_req_vlds', f'{r}_collapsed_req_indexes', req_cnt, { 'pelig_indexes': [elig_index_w, f'{r}_collapsed_req_pelig_indexes'] }, f'{r}_req' )
+    elig_indexes = []
+    for i in range(req_cnt):
+        lsb = i * elig_index_w
+        msb = lsb + elig_index_w - 1
+        elig_index = f'{r}_req_pelig_indexes[{msb}:{lsb}] + {preferred}' if i < elig_cnt else f'{elig_index_w}\'d0'
+        elig_indexes.append( elig_index )
+    concata( elig_indexes, elig_index_w, f'{r}_req_elig_indexes' )
 
 #-------------------------------------------
 # resource accounting for <cnt> resource slots
@@ -1121,63 +1289,69 @@ def cache_tags( name, addr_w, tag_cnt, req_cnt, ref_cnt_max, incr_ref_cnt_max=1,
     enum( f'{name_uc}_', ['MISS_CANT_ALLOC', 'MISS', 'HIT', 'HIT_BEING_FILLED'] )
     ref_cnt_w = log2( ref_cnt_max+1 )
     for i in range(tag_cnt): reg( f'{name}__ref_cnt{i}', ref_cnt_w )
-    wirea( f'{name}__vlds', tag_cnt, concata( [f'|{name}__ref_cnt{i}' for i in range(tag_cnt)], reverse=True ) )
+    reg( f'{name}__vlds', tag_cnt )
     for i in range(tag_cnt): reg( f'{name}__addr{i}', addr_w )
     reg( f'{name}__filleds', tag_cnt )
 
-    wirea( f'{name}__avails', tag_cnt, concata( [f'{name}__ref_cnt{i} == 0' for i in range(tag_cnt)], reverse=True ) )
-    wire( f'{name}__alloc_vld', 1 )
-    choose_eligible( f'{name}__avail_i', f'{name}__avails', tag_cnt, f'{name}__avail_preferred_i', gen_preferred=True, adv_preferred=f'{name}__alloc_vld' )
-    wirea( f'{name}__avail_vld', 1, f'|{name}__avails_any_vld' )
-
-    avail_vld = f'{name}__avail_vld'
-    alloc_vld = ''
+    P()
+    P(f'// {name} hit checks' )
+    P(f'//' )
     hits = ''
+    needs_allocs = []
     for r in range(req_cnt):
-        P()
-        P(f'// {name}_req{r}' )
-        P(f'//' )
-        P(f'// TODO: hit_one_hot needs to take into account a slot allocated by a prior requestor for the same line' )
-        P(f'//' )
-        wirea( f'{name}_req{r}__hit_one_hot', tag_cnt, concata( [f'{name}_req{r}_pvld && {name}__vlds[{i}] && {name}_req{r}_addr == {name}__addr{i}' for i in range(tag_cnt)], reverse=True ) )
+        wirea( f'{name}_req{r}__hit_one_hot', tag_cnt, concata( [f'{name}_req{r}_pvld && {name}__vlds[{i}] && {name}_req{r}_addr == {name}__addr{i}' for i in range(tag_cnt)], 1 ) )
         one_hot_to_binary( f'{name}_req{r}__hit_one_hot', tag_cnt, f'{name}_req{r}__hit_i', f'{name}_req{r}__hit_vld' )
         wirea( f'{name}_req{r}_hit_and_filled', 1, f'{name}_req{r}__hit_vld && ({name}_req{r}__hit_one_hot & {name}__filleds) == {name}_req{r}__hit_one_hot' )
         wirea( f'{name}_req{r}__needs_alloc', 1, f'{name}_req{r}_pvld && !{name}_req{r}__hit_vld' )
-        if can_always_alloc:
-            wirea( f'{name}_req{r}_status', 2, f'{name}_req{r}_hit_and_filled ? {name_uc}_HIT : {name}_req{r}__hit_vld ? {name_uc}_HIT_BEING_FILLED : {name_uc}_MISS' )
-            dassert( f'{name}_req{r}__needs_alloc === 1\'b0 || ({avail_vld}) === 1\'b1', f'{name} has can_always_alloc=True but can\'t alloc for req{r}' )
-        else:
-            wirea( f'{name}_req{r}_status', 2, f'{name}_req{r}_hit_and_filled ? {name_uc}_HIT : {name}_req{r}__hit_vld ? {name_uc}_HIT_BEING_FILLED : ({avail_vld}) ? {name_uc}_MISS : {name_uc}_MISS_CANT_ALLOC' )
-        wirea( f'{name}_req{r}_tag_i', tag_i_w, f'{name}_req{r}__hit_vld ? {name}_req{r}__hit_i : {name}__avail_i' )
-        if r != 0: alloc_vld += ' || '
-        alloc_vld += f'{name}_req{r}__needs_alloc'
-        if r != 0: avail_vld += ' && '
-        avail_vld += f'!{name}_req{r}__needs_alloc'
         if r != 0: hits += ' | '
         hits += f'{name}_req{r}__hit_one_hot'
+        needs_allocs.append( f'{name}_req{r}__needs_alloc' )
+    wirea( f'{name}__hits', tag_cnt, hits )
+    wirea( f'{name}__needs_allocs', req_cnt, concata( needs_allocs, 1 ) )
+
+    P()
+    P(f'// {name} allocs' )
+    P(f'//' )
+    wirea( f'{name}__avails', tag_cnt, concata( [f'!{name}__hits[{i} && {name}__ref_cnt{i} == 0' for i in range(tag_cnt)], 1 ) )
+    choose_eligibles( f'{name}__alloc', f'{name}__avails', tag_cnt, f'{name}__avail_preferred_i', f'{name}__needs_allocs', req_cnt, gen_preferred=True )
+    addrs = [f'{name}_req{i}_addr' for i in range(req_cnt)]
+    concata( addrs, addr_w, r'{name}__alloc_addrs' )
+    for i in range(tag_cnt): muxa( f'{name}__alloc_resource{i}_addr', addr_w, f'{name}__alloc_resource{i}_req_i', addrs )
+    always_at_posedge()
+    P(f'    if ( !{reset_} ) begin' )
+    P(f'        {name}__vlds <= 0;' )
+    P(f'    end else begin' )
+    for i in range(tag_cnt):
+        lsb = i*addr_w
+        msb = lsb + addr_w - 1
+        P(f'        if ( {name}__alloc_elig_vlds[{i}] ) begin' )
+        P(f'            {name}__vlds[{i}] <= 1\'b1;' )
+        P(f'            {name}__addr{i} <= {name}__alloc_addrs[{msb}:{lsb};' )
+        P(f'        end' )
+    P(f'    end' )
+    P(f'end' )
+
+    P()
+    P(f'// {name} statuses' )
+    P(f'//' )
+    for r in range(req_cnt):
+        if can_always_alloc:
+            wirea( f'{name}_req{r}_status', 2, f'{name}_req{r}_hit_and_filled ? {name_uc}_HIT : {name}_req{r}__hit_vld ? {name_uc}_HIT_BEING_FILLED : {name_uc}_MISS' )
+            dassert( f'!{name}_req{r}__needs_alloc || {name}__alloc_req_vlds[{r}]', f'{name} has can_always_alloc=True but can\'t alloc for req{r}' )
+        else:
+            wirea( f'{name}_req{r}_status', 2, f'{name}_req{r}_hit_and_filled ? {name_uc}_HIT : {name}_req{r}__hit_vld ? {name_uc}_HIT_BEING_FILLED : ({name}__alloc_req_vlds[{r}] ? {name_uc}_MISS : {name_uc}_MISS_CANT_ALLOC' )
+        wirea( f'{name}_req{r}_tag_i', tag_i_w, f'{name}_req{r}__hit_vld ? {name}_req{r}__hit_i : {name}__alloc_req{r}_resource_i' )
         sigs = { 'addr': addr_w, 
                  'tag_i': tag_i_w,
                  'status': 2 }
         if incr_ref_cnt_max > 1: sigs['incr_cnt'] = log2(incr_ref_cnt_max+1)
         iface_dprint( f'{name}_req{r}', sigs, f'{name}_req{r}_pvld' )
-    wirea( f'{name}__hits', tag_cnt, hits )
 
     P()
-    P(f'// {name}_alloc' )
+    P(f'// {name} decrements' )
     P(f'//' )
-    P(f'assign {name}__alloc_vld = {alloc_vld};' )
-    binary_to_one_hot( f'{name}__avail_i', tag_cnt, f'{name}__allocs', f'{name}__alloc_vld' )
-    always_at_posedge()
-    for i in range(tag_cnt):
-        addr_expr = f'{name}_req0_addr'  # TODO: needs to change if multiple requestors
-        P(f'    if ( {name}__alloc_vld && {name}__avail_i == {i} ) {name}__addr{i} <= {addr_expr};' )
-    P(f'end' )
-
     decrs = ''
     for r in range(decr_req_cnt):
-        P()
-        P(f'// {name}_decr{r}' )
-        P(f'//' )
         binary_to_one_hot( f'{name}_decr{r}_tag_i', tag_cnt, f'{name}_decr{r}__one_hot', f'{name}_decr{r}_pvld' )
         if r != 0: decrs += ' | '
         decrs += f'{name}_decr{r}__one_hot'
@@ -1185,7 +1359,7 @@ def cache_tags( name, addr_w, tag_cnt, req_cnt, ref_cnt_max, incr_ref_cnt_max=1,
     wirea( f'{name}__decrs', tag_cnt, decrs )
 
     P()
-    P(f'// {name}_fill' )
+    P(f'// {name} fill' )
     P(f'//' )
     binary_to_one_hot( f'{name}_fill_tag_i', tag_cnt, f'{name}__fills', f'{name}_fill_pvld' )
     iface_dprint( f'{name}_fill', { 'tag_i': tag_i_w }, f'{name}_fill_pvld' )
@@ -1199,18 +1373,12 @@ def cache_tags( name, addr_w, tag_cnt, req_cnt, ref_cnt_max, incr_ref_cnt_max=1,
         P(f'        {name}__ref_cnt{i} <= 0;' )
     P(f'    end else begin' )
     for i in range(tag_cnt): 
-        bool_expr = f'{name}__allocs[{i}]'
+        bool_expr = f'{name}__alloc_resource_vlds[{i}]'
         sum_expr = f'{name}__ref_cnt{i}'
-        if incr_ref_cnt_max == 1: 
-            sum_expr += f' + {name}__allocs[{i}]'
+        sum_expr += f' + {name}__alloc_resource_vlds[{i}]'
         for r in range(req_cnt):
-            if incr_ref_cnt_max > 1:
-                dassert( f'!{name}_req{r}_pvld || {name}_req{r}_incr_cnt != 0', f'{name}_req{r}_incr_cnt must be at least 1', with_clk=False, indent='        ' )
             bool_expr += f' || {name}_req{r}__hit_one_hot[{i}]'
-            if incr_ref_cnt_max == 1:
-                sum_expr  += f' + {name}_req{r}__hit_one_hot[{i}]'
-            else:
-                sum_expr  += f' + (({name}__allocs[{i}] || {name}_req{r}__hit_one_hot[{i}]) ? {name}_req{r}_incr_cnt : 0)'
+            sum_expr  += f' + {name}_req{r}__hit_one_hot[{i}]'
         for r in range(decr_req_cnt):
             bool_expr += f' || {name}_decr{r}__one_hot[{i}]'
             sum_expr  += f' - {name}_decr{r}__one_hot[{i}]'
@@ -1238,7 +1406,7 @@ def cache_tags( name, addr_w, tag_cnt, req_cnt, ref_cnt_max, incr_ref_cnt_max=1,
     dassert_no_x( f'{name}__allocs' )
     dassert_no_x( f'{name}__fills' )
     dassert_no_x( f'{name}__decrs' )
-    dassert( f'({name}__hits & {name}__allocs) === {tag_cnt}\'d0', f'{name} has hit and alloc to the same slot' )
+    dassert( f'({name}__hits & {name}__alloc_resource_vlds) === {tag_cnt}\'d0', f'{name} has hit and alloc to the same slot' )
     dassert( f'({name}__fills & {name}__filleds) === {tag_cnt}\'d0', 'f{name} has fill of already filled slot' )
     dassert( f'({name}__decrs & {name}__vlds) === {name}__decrs', f'{name} has decr-ref-cnt of slot with ref_cnt==0' )
     expr = ''
@@ -1485,3 +1653,56 @@ def tb_ram_read( ram_name, row, oname, sigs, do_decl=True ):
 
 def tb_ram_write( ram_name, row, iname, sigs, do_decl=True ):
     iface_combine( iname, f'{ram_name}[{row}]', sigs, do_decl )
+
+#-----------------------------------------------------------------
+# Partial testbench for logic in this file.
+#-----------------------------------------------------------------
+def make_V( module_name ):
+    pass
+
+def make_tb( name, module_name ):
+    module_header_begin( f'tb_{module_name}' )
+    module_header_end()
+    P()
+    tb_clk( default_cycles_max=10000 )
+    tb_reset_()
+    tb_dump( f'tb_{module_name}' )
+    P()
+    tb_rand_init()
+
+    #-----------------------------------------------------------------
+    # one pulse to combinational logic below
+    #-----------------------------------------------------------------
+    reg( f'combo_pvld_p', 1 )
+    reg( f'combo_pvld', 1 )
+    always_at_posedge()
+    P(f'    if ( !{reset_} ) begin' )
+    P(f'        combo_pvld_p <= 1;' )
+    P(f'        combo_pvld <= 0;' )
+    P(f'    end else begin' )
+    P(f'        combo_pvld <= combo_pvld_p;' )
+    P(f'        combo_pvld_p <= 0;' )
+    P(f'    end' )
+    P(f'end' )
+
+    #-----------------------------------------------------------------
+    # concata(), unconcata()
+    # collapse(), uncollapse()
+    #-----------------------------------------------------------------
+    wirea( 'mask', 4, f'4\'b1010' )
+    wirea( 'addr0', 32, '32\'h10000' )
+    wirea( 'addr1', 32, '32\'h20000' )
+    wirea( 'addr2', 32, '32\'h40000' )
+    wirea( 'addr3', 32, '32\'h50000' )
+    addrs = [ f'addr{i}' for i in range(4) ]
+    concata( addrs, 32, f'addrs' )
+    collapse( 'mask', 4, f'collapsed', { 'addrs': [ 32, 'addrs' ] } )
+    unconcata( 'collapsed_addrs', 4, 32, f'collapsed_addr' )
+    unconcata( 'collapsed_indexes', 4, 2, f'collapsed_index' )
+    uncollapse( 'collapsed_vlds', 'collapsed_indexes', 4, { 'addrs': [ 32, 'collapsed_addrs' ],
+                                                            'indexes': [ 2, 'collapsed_indexes' ] }, 'uncollapsed' )
+    unconcata( 'uncollapsed_addrs', 4, 32, f'uncollapsed_addr' )
+    unconcata( 'uncollapsed_indexes', 4, 2, f'uncollapsed_index' )
+    
+    P()
+    P(f'endmodule // tb_{module_name}' )
