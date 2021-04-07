@@ -1670,9 +1670,10 @@ def make_tb( name, module_name ):
     P()
     tb_rand_init()
 
-    #-----------------------------------------------------------------
-    # one pulse to combinational logic below
-    #-----------------------------------------------------------------
+    P()
+    P(f'//----------------------------------------' )
+    P(f'// one pulse to combinational logic below' )
+    P(f'//----------------------------------------' )
     reg( f'combo_pvld_p', 1 )
     reg( f'combo_pvld', 1 )
     always_at_posedge()
@@ -1685,10 +1686,11 @@ def make_tb( name, module_name ):
     P(f'    end' )
     P(f'end' )
 
-    #-----------------------------------------------------------------
-    # concata(), unconcata()
-    # collapse(), uncollapse()
-    #-----------------------------------------------------------------
+    P()
+    P(f'//----------------------------------------' )
+    P(f'// concata(), unconcata()' )
+    P(f'// collapse(), uncollapse()' )
+    P(f'//----------------------------------------' )
     wirea( 'mask', 4, f'4\'b1010' )
     wirea( 'addr0', 32, '32\'h10000' )
     wirea( 'addr1', 32, '32\'h20000' )
@@ -1699,10 +1701,16 @@ def make_tb( name, module_name ):
     collapse( 'mask', 4, f'collapsed', { 'addrs': [ 32, 'addrs' ] } )
     unconcata( 'collapsed_addrs', 4, 32, f'collapsed_addr' )
     unconcata( 'collapsed_indexes', 4, 2, f'collapsed_index' )
+    P()
     uncollapse( 'collapsed_vlds', 'collapsed_indexes', 4, { 'addrs': [ 32, 'collapsed_addrs' ],
                                                             'indexes': [ 2, 'collapsed_indexes' ] }, 'uncollapsed' )
     unconcata( 'uncollapsed_addrs', 4, 32, f'uncollapsed_addr' )
     unconcata( 'uncollapsed_indexes', 4, 2, f'uncollapsed_index' )
     
+    P()
+    P(f'//----------------------------------------' )
+    P(f'// choose_eligibles()' )
+    P(f'//----------------------------------------' )
+
     P()
     P(f'endmodule // tb_{module_name}' )
