@@ -47,6 +47,7 @@ def swirea( name, w, v ):  decla( 'wire signed', name, w, v )
 def reg( name, w ):        decl( 'reg', name, w )
 def sreg( name, w ):       decl( 'reg signed', name, w )
 def enum( prefix, names ):
+def parse_enums( file_name, prefix ):
 def module_header_end():
 def module_footer( mn ):
 ```
