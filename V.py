@@ -138,6 +138,19 @@ def enum( prefix, names ):
     for i in range(len(names)):
         wirea( f'{prefix}{names[i]}', w, i )
 
+def enums_parse( file_name, prefix ):
+    enums = {}
+    if not S.file_exists( file_name ): S.die( f':enums_parse: {file_name} does not exist' )
+    with open( file_name ) as my_file:
+        for line in my_file:
+            m = S.match( line, f'^wire .* ({prefix}\w+) = (\d+);' )
+            if m:
+                name = m.group( 1 )
+                val  = int( m.group( 2 ) )
+                enums[name] = val
+    if len( enums ) == 0: die( f'enums_parse: {file_name} contains no enums with the prefix "{prefix}"' )
+    return enums
+
 def display( msg, sigs, use_hex_w=16, prefix='        ' ):
     fmt = ''
     vals = ''
@@ -925,6 +938,14 @@ def uncollapse( mask, indexes, index_cnt, vals, r ):
 # note: elig_mask should be left-to-right order, not right-to-left
 #-------------------------------------------
 def choose_eligible( r, elig_mask, cnt, preferred, gen_preferred=False, adv_preferred='' ):
+    if cnt <= 0: S.die( f'choose_eligible: cnt is {cnt}' )
+    if cnt == 1:
+        # trivial case
+        wirea( f'{elig_mask}_any_vld', 1, f'{elig_mask}' )
+        wirea( r, 1, '1\'d0' )
+        return r
+
+    # cnt > 1
     w = log2( cnt )
     if gen_preferred: reg( preferred, w )
     reverse( elig_mask, cnt, f'{elig_mask}_r' )
@@ -935,8 +956,8 @@ def choose_eligible( r, elig_mask, cnt, preferred, gen_preferred=False, adv_pref
     else:
         wirea( f'{r}_p', w+1, f'{preferred} + {choice}' )
         wirea( r, w, f'({r}_p >= {cnt} ? ({r}_p - {cnt}) : {r}_p' )
+    wirea( f'{elig_mask}_any_vld', 1, f'|{elig_mask}' )
     if gen_preferred:
-        P(f'wire {elig_mask}_any_vld = |{elig_mask};' )
         always_at_posedge()
         P(f'    if ( !{reset_} ) begin' )
         P(f'        {preferred} <= 0;' )
@@ -1001,7 +1022,7 @@ def choose_eligible_with_highest_prio( r, vlds, prios, prio_w ):
 #
 # We collapse the eligibles and collapse the requestors, then assign as much as we can.
 #-------------------------------------------
-def choose_eligibles( r, elig_mask, elig_cnt, preferred, req_mask, req_cnt, gen_preferred=False ):
+def choose_eligibles( r, elig_mask, elig_cnt, preferred, req_mask, req_cnt, gen_preferred=False, adv_preferred='' ):
     if not is_pow2( elig_cnt ): S.die( f'choose_eligibles: elig_cnt={elig_cnt} must be a power-of-2 for now' )
     elig_index_w = max(1, log2(elig_cnt))
     req_index_w  = max(1, log2(req_cnt))
@@ -1028,6 +1049,15 @@ def choose_eligibles( r, elig_mask, elig_cnt, preferred, req_mask, req_cnt, gen_
         elig_index = f'{r}_req_pelig_indexes[{msb}:{lsb}] + {preferred}' if i < elig_cnt else f'{elig_index_w}\'d0'
         elig_indexes.append( elig_index )
     concata( elig_indexes, elig_index_w, f'{r}_req_elig_indexes' )
+    if gen_preferred:
+        always_at_posedge()
+        P(f'    if ( !{reset_} ) begin' )
+        P(f'        {preferred} <= 0;' )
+        if adv_preferred: adv_preferred = f' && {adv_preferred}'
+        P(f'    end else if ( |{r}_collapsed_used{adv_preferred} ) begin' )
+        P(f'        {preferred} <= {preferred} + 1;' )
+        P(f'    end' )
+        P(f'end' )
 
 #-------------------------------------------
 # resource accounting for <cnt> resource slots
@@ -1325,24 +1355,24 @@ def cache_tags( name, addr_w, tag_cnt, req_cnt, ref_cnt_max, incr_ref_cnt_max=1,
     wirea( f'{name}__needs_allocs', req_cnt, concata( needs_allocs, 1 ) )
 
     P()
-    P(f'// {name} allocs' )
+    P(f'// {name} alloc' )
     P(f'//' )
-    wirea( f'{name}__avails', tag_cnt, concata( [f'!{name}__hits[{i}] && {name}__ref_cnt{i} == 0' for i in range(tag_cnt)], 1 ) )
-    choose_eligibles( f'{name}__alloc', f'{name}__avails', tag_cnt, f'{name}__avail_preferred_i', f'{name}__needs_allocs', req_cnt, gen_preferred=True )
-    unconcata( f'{name}__alloc_elig_vlds',        tag_cnt, 1,       f'{name}__alloc_elig_vld' )
-    unconcata( f'{name}__alloc_req_vlds',         req_cnt, 1,       f'{name}__alloc_req_vld' )
-    unconcata( f'{name}__alloc_elig_req_indexes', tag_cnt, req_i_w, f'{name}__alloc_elig_req_index' )
-    unconcata( f'{name}__alloc_req_elig_indexes', req_cnt, tag_i_w, f'{name}__alloc_req_elig_index' )
-    addrs = [f'{name}_req{i}_addr' for i in range(req_cnt)]
-    for i in range(tag_cnt): muxa( f'{name}__alloc_addr{i}', addr_w, f'{name}__alloc_elig_req_index{i}', addrs )
+    wirea( f'{name}__need_alloc_pvld', 1, f'|{name}__needs_allocs' )
+    wirea( f'{name}__avails', tag_cnt, concata( [f'{name}__need_alloc_pvld && !{name}__hits[{i}] && {name}__ref_cnt{i} == 0' for i in range(tag_cnt)], 1 ) )
+    choose_eligible( f'{name}__alloc_avail_chosen_i', f'{name}__avails', tag_cnt, f'{name}__avail_preferred_i', gen_preferred=True )
+    wirea( f'{name}__alloc_pvld', 1, f'{name}__avails_any_vld' )
+    choose_eligible( f'{name}__alloc_req_chosen_i',  f'{name}__needs_allocs', req_cnt, f'{name}__alloc_req_preferred_i', gen_preferred=True )
+    addrs = [ f'{name}_req{i}_addr' for i in range(req_cnt) ]
+    muxa( f'{name}__alloc_addr', addr_w, f'{name}__alloc_req_chosen_i', addrs )
+    binary_to_one_hot( f'{name}__alloc_avail_chosen_i', tag_cnt, r=f'{name}__alloc_avail_chosen_one_hot', pvld=f'{name}__alloc_pvld' )
     always_at_posedge()
     P(f'    if ( !{reset_} ) begin' )
     P(f'        {name}__vlds <= 0;' )
     P(f'    end else begin' )
     for i in range(tag_cnt):
-        P(f'        if ( {name}__alloc_elig_vlds[{i}] ) begin' )
+        P(f'        if ( {name}__alloc_pvld && {name}__alloc_avail_chosen_i == {i} ) begin' )
         P(f'            {name}__vlds[{i}] <= 1\'b1;' )
-        P(f'            {name}__addr{i} <= {name}__alloc_addr{i};' )
+        P(f'            {name}__addr{i} <= {name}__alloc_addr;' )
         P(f'        end' )
     P(f'    end' )
     P(f'end' )
@@ -1353,10 +1383,10 @@ def cache_tags( name, addr_w, tag_cnt, req_cnt, ref_cnt_max, incr_ref_cnt_max=1,
     for r in range(req_cnt):
         if can_always_alloc:
             wirea( f'{name}_req{r}_status', 2, f'{name}_req{r}_hit_and_filled ? {name_uc}_HIT : {name}_req{r}__hit_vld ? {name_uc}_HIT_BEING_FILLED : {name_uc}_MISS' )
-            dassert( f'!{name}_req{r}__needs_alloc || {name}__alloc_req_vld{r}', f'{name} has can_always_alloc=True but can\'t alloc for req{r}' )
+            dassert( f'!{name}_req{r}__needs_alloc || ({name}__alloc_pvld && {name}__alloc_req_chosen_i == {i})', f'{name} has can_always_alloc=True but can\'t alloc for req{r}' )
         else:
-            wirea( f'{name}_req{r}_status', 2, f'{name}_req{r}_hit_and_filled ? {name_uc}_HIT : {name}_req{r}__hit_vld ? {name_uc}_HIT_BEING_FILLED : ({name}__alloc_req_vlds[{r}] ? {name_uc}_MISS : {name_uc}_MISS_CANT_ALLOC' )
-        wirea( f'{name}_req{r}_tag_i', tag_i_w, f'{name}_req{r}__hit_vld ? {name}_req{r}__hit_i : {name}__alloc_req_elig_index{r}' )
+            wirea( f'{name}_req{r}_status', 2, f'{name}_req{r}_hit_and_filled ? {name_uc}_HIT : {name}_req{r}__hit_vld ? {name_uc}_HIT_BEING_FILLED : ({name}__alloc_pvld && {name}__alloc_req_chosen_i == {r}) ? {name_uc}_MISS : {name_uc}_MISS_CANT_ALLOC' )
+        wirea( f'{name}_req{r}_tag_i', tag_i_w, f'{name}_req{r}__hit_vld ? {name}_req{r}__hit_i : {name}__alloc_avail_chosen_i' )
         sigs = { 'addr': addr_w, 
                  'tag_i': tag_i_w,
                  'status': 2 }
@@ -1389,9 +1419,9 @@ def cache_tags( name, addr_w, tag_cnt, req_cnt, ref_cnt_max, incr_ref_cnt_max=1,
         P(f'        {name}__ref_cnt{i} <= 0;' )
     P(f'    end else begin' )
     for i in range(tag_cnt): 
-        bool_expr = f'{name}__alloc_elig_vld{i}'
+        bool_expr = f'{name}__alloc_avail_chosen_one_hot[{i}]'
         sum_expr = f'{name}__ref_cnt{i}'
-        sum_expr += f' + {name}__alloc_elig_vld{i}'
+        sum_expr += f' + {name}__alloc_avail_chosen_one_hot[{i}]'
         for r in range(req_cnt):
             bool_expr += f' || {name}_req{r}__hit_one_hot[{i}]'
             sum_expr  += f' + {name}_req{r}__hit_one_hot[{i}]'
@@ -1408,8 +1438,8 @@ def cache_tags( name, addr_w, tag_cnt, req_cnt, ref_cnt_max, incr_ref_cnt_max=1,
     P(f'// {name} filled updates' )
     P(f'//' )
     always_at_posedge()
-    P(f'    if ( |{name}__alloc_elig_vlds || {name}_fill_pvld ) begin' )
-    P(f'        {name}__filleds <= (~{name}__alloc_elig_vlds & {name}__filleds) | {name}__fills;' )
+    P(f'    if ( |{name}__alloc_avail_chosen_one_hot || {name}_fill_pvld ) begin' )
+    P(f'        {name}__filleds <= (~{name}__alloc_avail_chosen_one_hot & {name}__filleds) | {name}__fills;' )
     P(f'    end' )
     P(f'end' )
 
@@ -1419,11 +1449,10 @@ def cache_tags( name, addr_w, tag_cnt, req_cnt, ref_cnt_max, incr_ref_cnt_max=1,
     dassert_no_x( f'{name}__vlds' )
     dassert_no_x( f'{name}__filleds & {name}__vlds' )
     dassert_no_x( f'{name}__hits' )
-    dassert_no_x( f'{name}__alloc_elig_vlds' )
-    dassert_no_x( f'{name}__alloc_req_vlds' )
+    dassert_no_x( f'{name}__alloc_avail_chosen_one_hot' )
     dassert_no_x( f'{name}__fills' )
     dassert_no_x( f'{name}__decrs' )
-    dassert( f'({name}__hits & {name}__alloc_elig_vlds) === {tag_cnt}\'d0', f'{name} has hit and alloc to the same slot' )
+    dassert( f'({name}__hits & {name}__alloc_avail_chosen_one_hot) === {tag_cnt}\'d0', f'{name} has hit and alloc to the same slot' )
     dassert( f'({name}__fills & {name}__filleds) === {tag_cnt}\'d0', 'f{name} has fill of already filled slot' )
     dassert( f'({name}__decrs & {name}__vlds) === {name}__decrs', f'{name} has decr-ref-cnt of slot with ref_cnt==0' )
     expr = ''
@@ -1747,9 +1776,8 @@ def make_tb( name, module_name ):
     P(f'// choose_eligibles()' )
     P(f'//----------------------------------------' )
     wirea( 'avails', 8, '8\'b10000010' )
-    wirea( 'avail_preferred_i', 3, '3\'d2' )
     wirea( 'reqs', 4, '4\'b1101' )
-    choose_eligibles( 'arb', 'avails', 8, 'avail_preferred_i', 'reqs', 4, gen_preferred=False )
+    choose_eligibles( 'arb', 'avails', 8, 'avail_preferred_i', 'reqs', 4, gen_preferred=True )
     unconcata( 'arb_elig_req_indexes', 8, 2, 'arb_elig_req_index' )
     for i in range(8): muxa( f'alloc_addr{i}', 32, f'arb_elig_req_index{i}', addrs )
 
