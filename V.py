@@ -400,8 +400,8 @@ def iface_stage( iname, oname, sigs, pvld, prdy='', full_handshake=False, do_dpr
         P(f'end' )
         if do_dprint: iface_dprint( iname, sigs, f'{iname}_{pvld}', f'{iname}_prdy' )
 
-def iface_stageN( p, sigs, pvld, prdy='' ):
-    iface_stage( f'p{p}', f'p{p+1}', sigs, pvld, prdy )
+def iface_stageN( p, sigs, pvld, prdy='', full_handshake=False, do_print=False ):
+    iface_stage( f'p{p}', f'p{p+1}', sigs, pvld, prdy, full_handshake, do_print )
 
 def iface_dprint( name, sigs, pvld, prdy='', use_hex_w=16, with_clk=True, indent='' ):
     isigs = {}
@@ -1321,7 +1321,7 @@ def make_fifo( module_name ):
     P()
     P(f'endmodule // {module_name}' )
 
-def cache_tags( name, addr_w, tag_cnt, req_cnt, ref_cnt_max, incr_ref_cnt_max=1, decr_req_cnt=0, can_always_alloc=False ):
+def cache_tags( name, addr_w, tag_cnt, req_cnt, ref_cnt_max, incr_ref_cnt_max=1, decr_req_cnt=0, can_always_alloc=False, keep_slot0=False ):
     if incr_ref_cnt_max < 1: S.die( f'cache_tags: incr_ref_cnt_max needs to be at least 1' )
     if decr_req_cnt == 0: decr_req_cnt = req_cnt
 
@@ -1358,7 +1358,11 @@ def cache_tags( name, addr_w, tag_cnt, req_cnt, ref_cnt_max, incr_ref_cnt_max=1,
     P(f'// {name} alloc' )
     P(f'//' )
     wirea( f'{name}__need_alloc_pvld', 1, f'|{name}__needs_allocs' )
-    wirea( f'{name}__avails', tag_cnt, concata( [f'{name}__need_alloc_pvld && !{name}__hits[{i}] && {name}__ref_cnt{i} == 0' for i in range(tag_cnt)], 1 ) )
+    avails = []
+    for i in range(tag_cnt):
+        and_not_keep_slot0 = f' && !{name}__vlds[{i}]' if keep_slot0 and i == 0 else ''
+        avails.append( f'{name}__need_alloc_pvld && !{name}__hits[{i}] && {name}__ref_cnt{i} == 0{and_not_keep_slot0}' )
+    wirea( f'{name}__avails', tag_cnt, concata( avails, 1 ) )
     choose_eligible( f'{name}__alloc_avail_chosen_i', f'{name}__avails', tag_cnt, f'{name}__avail_preferred_i', gen_preferred=True )
     wirea( f'{name}__alloc_pvld', 1, f'{name}__avails_any_vld' )
     choose_eligible( f'{name}__alloc_req_chosen_i',  f'{name}__needs_allocs', req_cnt, f'{name}__alloc_req_preferred_i', gen_preferred=True )
