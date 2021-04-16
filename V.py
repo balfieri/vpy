@@ -24,9 +24,9 @@ import S
 
 P = print
 
-def reinit( _clk='clk', _reset_='reset_', _vdebug=True, _vassert=True ):
-    global clk, reset_, vdebug, vassert
-    global module_name, fifos
+def reinit( _clk='clk', _reset_='reset_', _vdebug=True, _vassert=True, _ramgen_cmd='' ):
+    global clk, reset_, vdebug, vassert, ramgen_cmd
+    global module_name, rams, fifos
     global seed_z_init, seed_w_init, seed_i
     global io
     global in_module_header
@@ -34,10 +34,12 @@ def reinit( _clk='clk', _reset_='reset_', _vdebug=True, _vassert=True ):
     reset_ = _reset_
     vdebug = _vdebug
     vassert = _vassert
+    ramgen_cmd = _ramgen_cmd
     module_name = ''
     io = []
     in_module_header = False
-    fifos  = {}
+    rams = {}
+    fifos = {}
     seed_z_init = 0x12345678
     seed_w_init = 0xbabecaf3
     seed_i = 0
@@ -65,10 +67,11 @@ def value_bitwidth( n ):
 def module_header_begin( mn ):
     global module_name
     module_name = mn
-    global fifos
+    global rams, fifos
     global io
     global in_module_header
     if in_module_header: S.die( 'module_header_begin() called while already in a module header' )
+    rams = {}
     fifos = {}
     P(f'// AUTOMATICALLY GENERATED - DO NOT EDIT OR CHECK IN' )
     P()
@@ -116,8 +119,8 @@ def module_header_end():
     io_s = ''
     for i in range( len(io) ):
         if io[i]['name'] != '':
-            if i != 0: ports_s = ', ' + ports_s
-            ports_s = io[i]['name'] + ports_s
+            if i != 0: ports_s += ', '
+            ports_s += io[i]['name']
 
     if ports_s != '': ports_s = f'( {ports_s} )'
 
@@ -151,7 +154,7 @@ def enums_parse( file_name, prefix ):
     if len( enums ) == 0: die( f'enums_parse: {file_name} contains no enums with the prefix "{prefix}"' )
     return enums
 
-def display( msg, sigs, use_hex_w=16, prefix='        ' ):
+def display( msg, sigs, use_hex_w=16, prefix='        ', show_module=False ):
     fmt = ''
     vals = ''
     for sig in sigs:
@@ -170,7 +173,8 @@ def display( msg, sigs, use_hex_w=16, prefix='        ' ):
                 fmt  += f'%-d'
             vals += f', {sig}'
     while len( msg ) < 30: msg += ' '
-    fmt = f'%0d: {msg}: {fmt}     in %m'
+    fmt = f'%0d: {msg}: {fmt}'
+    if show_module: fmt += '   in %m'
     P( f'{prefix}$display( "{fmt}", $stime{vals} );' )
 
 def dprint( msg, sigs, pvld, use_hex_w=16, with_clk=True, indent='' ):
@@ -201,9 +205,9 @@ def dassert_no_x( expr, pvld='', with_clk=True, indent='    ' ):
 #-------------------------------------------
 # Common Verilog code wrappers
 #-------------------------------------------
-def always_at_posedge( _clk='' ):
+def always_at_posedge( stmt='begin', _clk='' ):
     if _clk == '': _clk = clk
-    P( f'always @( posedge {_clk} ) begin' )
+    P( f'always @( posedge {_clk} ) {stmt}' )
 
 #-------------------------------------------
 # Replicate expression cnt times as a concatenation
@@ -307,17 +311,37 @@ def iface_inst( pname, wname, sigs, is_io=False, stallable=True ):
         s += f', .{pname}_{sig}({wname}_{sig})'
     P( s )
 
-def iface_concat( iname, sigs ):
+def iface_concat( iname, sigs, r='' ):
     if len(sigs) == 0: S.die( 'iface_concat: empty sigs list' )
     concat = ''
+    w = 0
     for sig in sigs:
         if concat != '': concat += ','
         if iname != '': concat += f'{iname}_'
         concat += sig
-    if len(sigs) == 1:
-        return concat
+        w += sigs[sig]
+    if len(sigs) != 1:
+        concat = f'{{{concat}}}'
+    if r != '':
+        wirea( r, w, concat )
+        return r
     else:
-        return f'{{{concat}}}'
+        return concat
+
+def iface_unconcat( cname, sigs, oname='' ):
+    if len(sigs) == 0: S.die( 'iface_unconcat: empty sigs list' )
+    w = 0
+    for sig in sigs: w += sigs[sig]
+    msb = w - 1
+    osigs = {}
+    for sig in sigs: 
+        sw = sigs[sig]
+        lsb = msb - sw + 1
+        v = f'{cname}[{msb}:{lsb}]'
+        osigs[sig] = v
+        if oname != '': wirea( f'{oname}_{sig}', sw, v )
+        msb = lsb - 1
+    return osigs
 
 def iface_combine( iname, oname, sigs, do_decl=True ):
     if do_decl: wire( oname, iface_width(sigs) )
@@ -935,7 +959,7 @@ def uncollapse( mask, indexes, index_cnt, vals, r ):
 #-------------------------------------------
 # choose eligible from mask and preferred 
 #
-# note: elig_mask should be left-to-right order, not right-to-left
+# note: elig_mask should be right-to-left order
 #-------------------------------------------
 def choose_eligible( r, elig_mask, cnt, preferred, gen_preferred=False, adv_preferred='' ):
     if cnt <= 0: S.die( f'choose_eligible: cnt is {cnt}' )
@@ -1181,44 +1205,155 @@ def rom_2d( i0, i1, names, entries, nesting=0, result_w=None ):
     if nesting == 0:
         P(f'end' )
 
-def fifo( sigs, pvld, prdy, depth, with_wr_prdy=True, prefix='d_', u_name='' ):
+#--------------------------------------------------------------------
+# By default, this generates a 2-port synchronous ram (1 clock).
+#
+# wr_cnt, rd_cnt, and rw_cnt can be changed to control the number of read ports, write ports,
+# and bi-directional ports. A ram may not have any write or read ports if it has any bi-directional ports.
+#
+# clks=[...] will cause each port to have its own clock and to use the clocks
+# in the list. The number of clocks must match the number of ports. Write clocks must 
+# be listed before read clocks.
+#
+# If you specified an external ram generator using ramgen_cmd=... in reinit(),
+# then you must supply an m_name that can be parsed by your proprietary ram
+# generator so that it will generate a ram that abides by the expectations
+# of other arguments specified here, namely wr_cnt, rd_cnt, and rw_cnt. 
+# There are also expectations for ram port names, such as: we, wa, di, re, ra, dout. 
+# If these don't match, we could provide other arguments in reinit() to change the names,
+# OR you could supply a ramgen_cmd that creates a canonical wrapper around the actual ram.
+#--------------------------------------------------------------------
+def ram( iname, oname, sigs, depth, wr_cnt=1, rd_cnt=1, rw_cnt=0, clks=[], m_name='', u_name='', add_blank_line=True ):
+    port_cnt = wr_cnt + rd_cnt + rw_cnt
+    have_clks = len(clks) != 0
+    if have_clks and len(clks) != port_cnt: S.die( f'ram(): if clks=[...] is given, the number of clocks must match the number of ports' )
+    if port_cnt <= 0: S.die( f'ram(): 0-port ram is not allowed' )
+    if (wr_cnt == 0) != (rd_cnt == 0): S.die( f'ram(): if you have a write port, you must have a read port, and vice-versa' )
+    if wr_cnt != 0 and rw_cnt != 0: S.dir( f'ram(): you may not have both wr(rd) ports and bi-directional rw ports at the same time' )
+    if wr_cnt > 1 or rw_cnt > 1 and iname == '': S.dir( f'ram(): iname must be supplied when wr_cnt > 1 or rw_cnt > 1' )
+    if rd_cnt > 1 or rw_cnt > 1 and oname == '': S.dir( f'ram(): oname must be supplied when rd_cnt > 1 or rw_cnt > 1' )
+
+    w = 0
+    for sig in sigs: w += sigs[sig]
+
+    if m_name == '': m_name = f'ram_{depth}x{w}_wr{wr_cnt}_rd{_rd_cnt}_rw{rw_cnt}'
+    if u_name == '': u_name = f'u_{m_name}'
+    rams[m_name] = {'depth': depth, 'w': w, 'wr_cnt': wr_cnt, 'rd_cnt': rd_cnt, 'rw_cnt': rw_cnt, 'ramgen_cmd': ramgen_cmd }
+
+    if add_blank_line: P()
+    names = ', '.join( sigs.keys() )
+    P(f'// {depth}x{w} {port_cnt}-port ram for: {names}' )
+    P(f'//' )
+
+    inst_sigs = '' if have_clks else f'.clk( {clk} )'
+    clk_i = 0
+    for i in range(wr_cnt):
+        wr_name = '' if iname == '' else f'{iname}_'
+        suff = '' if wr_cnt == 1 else f'{i}'
+        if have_clks: 
+            if inst_sigs != '': inst_sigs += ', '
+            inst_sigs += f'.clk_w{suff}( {clks[clk_i]} )' 
+            clk_i += 1
+        inst_sigs += f', .we{suff}( {wr_name}we{suff} )'
+        inst_sigs += f', .wa{suff}( {wr_name}wa{suff} )'
+        ins = ''
+        for sig in sigs:
+            if ins != '': ins += ', '
+            ins += f'{wr_name}{sig}'
+        inst_sigs += f', .di{suff}( {ins} )'
+    
+    for i in range(rd_cnt):
+        rd_name = '' if oname == '' else f'{oname}_'
+        suff = '' if rd_cnt == 1 else f'{i}'
+        if have_clks: 
+            inst_sigs += f', .clk_r{suff}( {clks[clk_i]} )' 
+            clk_i += 1
+        inst_sigs += f', .re{suff}( {rd_name}re{suff} )'
+        inst_sigs += f', .ra{suff}( {rd_name}ra{suff} )'
+        outs = ''
+        for sig in sigs:
+            wire( f'{rd_name}{sig}', sigs[sig] )
+            if outs != '': outs += ', '
+            outs += f'{rd_name}{sig}'
+        inst_sigs += f', .dout{suff}( {outs} )'
+    
+    for i in range(rw_cnt):
+        wr_name = '' if iname == '' else f'{iname}_'
+        rd_name = '' if oname == '' else f'{oname}_'
+        suff = '' if wr_cnt == 1 else f'{i}'
+        if have_clks: 
+            if inst_sigs != '': inst_sigs += ', '
+            inst_sigs += f', .clk{suff}( {clks[clk_i]} )' 
+            clk_i += 1
+        inst_sigs += f', .we{suff}( {wr_name}we{suff} )'
+        inst_sigs += f', .a{suff}( {wr_name}a{suff} )'
+        inst_sigs += f', .re{suff}( {rd_name}re{suff} )'
+        ins = ''
+        outs = ''
+        for sig in sigs:
+            wire( f'{rd_name}{sig}', sigs[sig] )
+            if ins  != '': ins  += ', '
+            if outs != '': outs += ', '
+            ins  += f'{wr_name}{sig}'
+            outs += f'{rd_name}{sig}'
+        inst_sigs += f', .di{suff}( {ins} )'
+        inst_sigs += f', .dout{suff}( {outs} )'
+    
+    P(f'{m_name} {u_name}( {inst_sigs}' )
+
+def make_ram( module_name ):
+    info = rams[module_name]
+    if ramgen_cmd == '':
+        S.die( f'make_ram(): currently cannot generate rams without reinit( ramgen_cmd=... ) being set - restriction will be lifted soon' )
+    else:
+        P()
+        P(f'// {module_name} generated externally using: {ramgen_cmd} {module_name}' )
+        P(f'//' )
+        S.cmd( f'{ramgen_cmd} {module_name}', echo=False, echo_stdout=False )
+
+def fifo( iname, oname, sigs, pvld, prdy, depth, m_name='', u_name='', with_wr_prdy=True ):
     if depth > 1: depth += 1
+    w = 0
+    for sig in sigs: w += sigs[sig]
+
+    m_name = f'{module_name}_fifo_{depth}x{w}'
+    if u_name == '': u_name = f'u_{m_name}'
+    fifos[m_name] = {'depth': depth, 'w': w}
+
     P()
     names = ', '.join( sigs.keys() )
-    P(f'// {depth}-deep fifo for: {names}' )
+    P(f'// {depth}x{w} fifo for: {names}' )
     P(f'//' )
-    w = 0
 
+    if iname != '': iname += '_' 
+    if oname != '': oname += '_' 
     ins = ''
     outs = ''
-    d_pvld = f'{prefix}{pvld}'
-    d_prdy = f'{prefix}{prdy}'
+    wr_pvld = f'{iname}{pvld}'
+    wr_prdy = f'{iname}{prdy}'
+    rd_pvld = f'{oname}{pvld}'
+    rd_prdy = f'{oname}{prdy}'
     if with_wr_prdy: 
-        wire( prdy, 1 )
+        wire( wr_prdy, 1 )
     else:
-        prdy = ''
-    wire( d_pvld, 1 )
-    wire( d_prdy, 1 )
+        wr_prdy = ''
+    wire( rd_pvld, 1 )
+    wire( rd_prdy, 1 )
     for sig in sigs:
-        w += sigs[sig]
-        wire( f'{prefix}{sig}', sigs[sig] )
+        wire( f'{oname}{sig}', sigs[sig] )
         if ins  != '': ins  += ', '
         if outs != '': outs += ', '
-        ins += sig
-        outs += f'{prefix}{sig}'
+        ins  += f'{iname}{sig}'
+        outs += f'{oname}{sig}'
     
-    name = f'{module_name}_fifo_{depth}x{w}'
-    if u_name == '': u_name = f'u_{name}'
-    fifos[name] = {'depth': depth, 'w': w}
-
-    P(f'{name} {u_name}( .{clk}({clk}), .{reset_}({reset_}),' )
-    P(f'                        .wr_pvld({pvld}), .wr_prdy({prdy}), .wr_pd('+'{'+f'{ins}'+'}),' )
-    P(f'                        .rd_pvld({d_pvld}), .rd_prdy({d_prdy}), .rd_pd('+'{'+f'{outs}'+'}) );' )
+    P(f'{m_name} {u_name}( .{clk}({clk}), .{reset_}({reset_}),' )
+    P(f'                        .wr_pvld({wr_pvld}), .wr_prdy({wr_prdy}), .wr_pd('+'{'+f'{ins}'+'}),' )
+    P(f'                        .rd_pvld({rd_pvld}), .rd_prdy({rd_prdy}), .rd_pd('+'{'+f'{outs}'+'}) );' )
     if with_wr_prdy:
         P(f'// synopsys translate_off' )
         always_at_posedge()
-        P(f'    if ( {reset_} === 1 && {pvld} !== 0 && {prdy} !== 1 ) begin' )
-        P(f'        $display( "%0d: %m: ERROR: fifo wr_pvld=%d but wr_prdy=%d", $stime, {pvld}, {prdy} );' )
+        P(f'    if ( {reset_} === 1 && {wr_pvld} !== 0 && {wr_prdy} !== 1 ) begin' )
+        P(f'        $display( "%0d: %m: ERROR: fifo wr_pvld=%d but wr_prdy=%d", $stime, {wr_pvld}, {wr_prdy} );' )
         P(f'        $fatal;' )
         P(f'    end' )
         P(f'end' )
@@ -1321,7 +1456,7 @@ def make_fifo( module_name ):
     P()
     P(f'endmodule // {module_name}' )
 
-def cache_tags( name, addr_w, tag_cnt, req_cnt, ref_cnt_max, incr_ref_cnt_max=1, decr_req_cnt=0, can_always_alloc=False, keep_slot0=False ):
+def cache_tags( name, addr_w, tag_cnt, req_cnt, ref_cnt_max, incr_ref_cnt_max=1, decr_req_cnt=0, can_always_alloc=False, custom_avails=False ):
     if incr_ref_cnt_max < 1: S.die( f'cache_tags: incr_ref_cnt_max needs to be at least 1' )
     if decr_req_cnt == 0: decr_req_cnt = req_cnt
 
@@ -1358,11 +1493,13 @@ def cache_tags( name, addr_w, tag_cnt, req_cnt, ref_cnt_max, incr_ref_cnt_max=1,
     P(f'// {name} alloc' )
     P(f'//' )
     wirea( f'{name}__need_alloc_pvld', 1, f'|{name}__needs_allocs' )
-    avails = []
-    for i in range(tag_cnt):
-        and_not_keep_slot0 = f' && !{name}__vlds[{i}]' if keep_slot0 and i == 0 else ''
-        avails.append( f'{name}__need_alloc_pvld && !{name}__hits[{i}] && {name}__ref_cnt{i} == 0{and_not_keep_slot0}' )
-    wirea( f'{name}__avails', tag_cnt, concata( avails, 1 ) )
+    if custom_avails:
+        wire( f'{name}__avails', tag_cnt )
+    else:
+        avails = []
+        for i in range(tag_cnt):
+            avails.append( f'{name}__need_alloc_pvld && !{name}__hits[{i}] && {name}__ref_cnt{i} == 0' )
+        wirea( f'{name}__avails', tag_cnt, concata( avails, 1 ) )
     choose_eligible( f'{name}__alloc_avail_chosen_i', f'{name}__avails', tag_cnt, f'{name}__avail_preferred_i', gen_preferred=True )
     wirea( f'{name}__alloc_pvld', 1, f'{name}__avails_any_vld' )
     choose_eligible( f'{name}__alloc_req_chosen_i',  f'{name}__needs_allocs', req_cnt, f'{name}__alloc_req_preferred_i', gen_preferred=True )
@@ -1480,10 +1617,11 @@ def cache_filled_check( name, tag_i, r, tag_cnt, add_reg=True ):
 def module_footer( mn ):
     P()
     P(f'endmodule // {mn}' )
-    global fifos
-    for fifo in fifos:
-        make_fifo( fifo )
+    global rams, fifos
+    for ram  in rams:  make_ram( ram )
+    for fifo in fifos: make_fifo( fifo )
     fifos = {}
+    rams = {}
 
 def tb_clk( decl_clk=True, default_cycles_max=2000, perf_op_first=100, perf_op_last=200 ):
     P(f'' )

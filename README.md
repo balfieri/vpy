@@ -19,7 +19,7 @@ You can find more detailed explanations in the comment blocks above the function
 ## Initialization
 
 ```python
-def reinit( _clk='clk', _reset_='reset_', _vdebug=True, _vassert=True ):
+def reinit( _clk='clk', _reset_='reset_', _vdebug=True, _vassert=True, _ramgen_cmd='' ):
 ```
 
 ## Static Sizes and Widths
@@ -55,7 +55,7 @@ def module_footer( mn ):
 ## Debug
 
 ```python
-def display( msg, sigs, use_hex_w=16, prefix='        ' ):
+def display( msg, sigs, use_hex_w=16, prefix='        ', show_module=False ):
 def dprint( msg, sigs, pvld, use_hex_w=16, with_clk=True, indent='' ):
 def dassert( expr, msg, pvld='', with_clk=True, indent='    ' ):
 def dassert_no_x( expr, pvld='', with_clk=True, indent='    ' ):
@@ -64,7 +64,7 @@ def dassert_no_x( expr, pvld='', with_clk=True, indent='    ' ):
 ## Miscellaneous
 
 ```python
-def always_at_posedge( _clk='' ):
+def always_at_posedge( stmt='begin', _clk='' ):
 ```
 
 ## Interfaces
@@ -78,7 +78,8 @@ def iface_wire( name, sigs, is_io=False, stallable=True ):
 def iface_reg( name, sigs, is_io=False, stallable=True ):
 def iface_reg_assign( lname, rname, sigs, indent='        ' ):
 def iface_inst( pname, wname, sigs, is_io=False, stallable=True ):
-def iface_concat( iname, sigs ):
+def iface_concat( iname, sigs, r='' ):
+def iface_unconcat( cname, sigs, oname='' ):
 def iface_combine( iname, oname, sigs, do_decl=True ):
 def iface_split( iname, oname, sigs, do_decl=True ):
 def iface_stage( iname, oname, sigs, pvld, prdy='', full_handshake=False, do_dprint=True ):
@@ -157,8 +158,9 @@ def resource_accounting( name, cnt, add_free_cnt=False, set_i_is_free_i=False ):
 ```python
 def rom_1d( i0, names, entries, nesting=0, result_w=None ):
 def rom_2d( i0, i1, names, entries, nesting=0, result_w=None ):
-def fifo( sigs, pvld, prdy, depth, with_wr_prdy=True, prefix='d_', u_name='' ):
-def cache_tags( name, addr_w, tag_cnt, req_cnt, ref_cnt_max, incr_ref_cnt_max=1, decr_req_cnt=0, can_always_alloc=False ):
+def ram( iname, oname, sigs, depth, wr_cnt=1, rd_cnt=1, rw_cnt=0, clks=[], m_name='', u_name='', add_blank_line=True ):
+def fifo( iname, oname, sigs, pvld, prdy, depth, m_name='', u_name='', with_wr_prdy=True ):
+def cache_tags( name, addr_w, tag_cnt, req_cnt, ref_cnt_max, incr_ref_cnt_max=1, decr_req_cnt=0, can_always_alloc=False, custom_avails=False ):
 def cache_filled_check( name, tag_i, r, tag_cnt, add_reg=True ):
 ```
 
