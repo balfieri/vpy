@@ -14,12 +14,24 @@ V.reinit()
 
 # Available Functions
 
-You can find more detailed explanations in the comment blocks above the functions in V.py. Here's a brief summary of the functions available and their categories.
+You can find more detailed explanations in the comment blocks above the functions in S.py and V.py. Here's a brief summary of the functions available and their categories.
 
 ## Initialization
 
 ```python
 def reinit( _clk='clk', _reset_='reset_', _vdebug=True, _vassert=True, _ramgen_cmd='' ):
+```
+
+## System (S.py)
+
+```python
+def die( msg ):
+def cmd( c, echo=True, echo_stdout=False, can_die=True ):
+def match( s, pattern ):
+def subst( s, pattern, subst ):
+def file_exists( file_name ):
+def file_line_cnt( file_name ):
+def file_edit( file_name, edits, echo_edits=False , must_apply_all=True ):
 ```
 
 ## Static Sizes and Widths
