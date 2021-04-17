@@ -131,6 +131,7 @@ def adder( r, c, do_incr, init=0, incr=1, _clk='', _reset_='' )
 def subtractor( r, c, do_decr, init=0, decr=1, _clk='', _reset_='' )
 def cla( r, w, a, b, cin )
 def vlog2( x, x_w )
+def hash( x, x_w, r_w, r='' )
 ```
 
 ## Fixed-Point Math

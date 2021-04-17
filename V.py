@@ -588,11 +588,33 @@ def cla( r, w, a, b, cin ):
 #-------------------------------------------
 # compute integer log2( x ) in hardware
 #-------------------------------------------
-def vlog2( x, x_w ):
+def vlog2( x, x_w, r='' ):
+    if r == '': r = f'{x}_lg2'
     cnt_w = value_bitwidth( x_w )
     ldz = count_leading_zeroes( x, x_w )
-    P(f'wire [{cnt_w-1}:0] {x}_lg2 = {cnt_w}\'d{x_w-1} - {ldz};' )
+    P(f'wire [{cnt_w-1}:0] {r} = {cnt_w}\'d{x_w-1} - {ldz};' )
+    return r
     
+#-------------------------------------------
+# hash a bunch of bits x (width: x_w) down to r_w bits;
+# currently this is done by XOR'ing groups of r_w bits with one another,
+# but other hash function options could be created in the future
+#-------------------------------------------
+def hash( x, x_w, r_w, r='' ):
+    if r == '': r = f'{x}_hash'
+    if r_w == 0:
+        expr = '0'
+    else:
+        groups = []
+        lsb = 0
+        while lsb < x_w:        
+            msb = min( x_w-1, lsb+r_w-1 )
+            groups.append( f'{x}[{msb}:{lsb}]' )
+            lsb = msb + 1
+        expr = ' ^ '.join( groups )
+    wirea( r, r_w, expr )
+    return r
+
 #-------------------------------------------
 # fixed-point resize
 #-------------------------------------------
@@ -672,6 +694,12 @@ def muxa( r, w, sel, vals, add_reg=True ):
             wirea( r, w, vals[0] )
         else:
             P( f'always @( * ) {r} = {vals[i]};' )
+    elif len(vals) == 2:
+        expr = f'{sel} ? {vals[1]} : {vals[0]}'
+        if add_reg:
+            wirea( r, w, expr )
+        else:
+            P( f'assign {r} = {expr};' )  
     else:
         if add_reg: P(f'reg [{w-1}:0] {r};' )
         P(f'always @( * ) begin' )
