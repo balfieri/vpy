@@ -137,9 +137,12 @@ def module_header_end():
     io = []
 
 def enum( prefix, names ):
-    w = log2( len(names) )
-    for i in range(len(names)):
+    cnt = len(names)
+    if cnt == 0: S.die( f'no enums' )
+    w = log2(cnt) if cnt > 1 else 1
+    for i in range(cnt):
         wirea( f'{prefix}{names[i]}', w, i )
+    return w
 
 def enums_parse( file_name, prefix ):
     enums = {}
@@ -186,7 +189,7 @@ def dprint( msg, sigs, pvld, use_hex_w=16, with_clk=True, indent='' ):
     display( msg, sigs, use_hex_w, prefix )
     P(f'// synopsys translate_on' )
 
-def dassert( expr, msg, pvld='', with_clk=True, indent='    ' ):
+def dassert( expr, msg, pvld='', with_clk=True, indent='    ', if_fatal='' ):
     if not vassert: return
     P(f'// synopsys translate_off' )
     if with_clk: always_at_posedge()
@@ -194,13 +197,13 @@ def dassert( expr, msg, pvld='', with_clk=True, indent='    ' ):
     pvld_test  = f'({pvld}) && '             if pvld != '' else ''
     P(f'{indent}if ( {reset_test}{pvld_test}(({expr}) !== 1\'b1) ) begin' )
     P(f'{indent}    $display( "%0d: ERROR: {msg}", $stime );' )
-    P(f'{indent}    $fatal;' )
+    P(f'{indent}    {if_fatal}$fatal;' )
     P(f'{indent}end' )
     if with_clk: P(f'end' )
     P(f'// synopsys translate_on' )
    
-def dassert_no_x( expr, pvld='', with_clk=True, indent='    ' ):
-    dassert( f'^({expr}) !== 1\'bx', f'found an X in: {expr}', pvld, with_clk, indent )
+def dassert_no_x( expr, pvld='', with_clk=True, indent='    ', if_fatal='' ):
+    dassert( f'^({expr}) !== 1\'bx', f'found an X in: {expr}', pvld, with_clk, indent, if_fatal )
 
 #-------------------------------------------
 # Common Verilog code wrappers

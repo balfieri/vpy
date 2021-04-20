@@ -69,8 +69,8 @@ def module_footer( mn )
 ```python
 def display( msg, sigs, use_hex_w=16, prefix='        ', show_module=False )
 def dprint( msg, sigs, pvld, use_hex_w=16, with_clk=True, indent='' )
-def dassert( expr, msg, pvld='', with_clk=True, indent='    ' )
-def dassert_no_x( expr, pvld='', with_clk=True, indent='    ' )
+def dassert( expr, msg, pvld='', with_clk=True, indent='    ', if_fatal='' )
+def dassert_no_x( expr, pvld='', with_clk=True, indent='    ', if_fatal='' )
 ```
 
 ## Miscellaneous
