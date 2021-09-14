@@ -28,6 +28,7 @@ def reinit( _clk='clk', _reset_='reset_', _vdebug=True, _vassert=True, _ramgen_c
     global clk, reset_, vdebug, vassert, ramgen_cmd
     global module_name, rams, fifos
     global seed_z_init, seed_w_init, seed_i
+    global custom_cla
     global io
     global in_module_header
     global vlint_off_width, vlint_on_width
@@ -45,6 +46,7 @@ def reinit( _clk='clk', _reset_='reset_', _vdebug=True, _vassert=True, _ramgen_c
     seed_z_init = 0x12345678
     seed_w_init = 0xbabecaf3
     seed_i = 0
+    custom_cla = False
     vlint_off_width  = 'verilator lint_off WIDTH' 
     vlint_on_width   = 'verilator lint_on WIDTH' 
     vlint_off_unused = 'verilator lint_off UNUSED' 
@@ -519,7 +521,7 @@ def subtractor( r, c, do_decr, init=0, decr=1, _clk='', _reset_='' ):
 # carry lookahead adder 
 #---------------------------------------------------------
 def cla( r, w, a, b, cin ):
-    if ~custom_cla: 
+    if not custom_cla: 
         # Let Synopsys do it.
         #
         P(f'wire [{w-1}:0] {r}_S = {a} + {b} + {cin};' )
