@@ -588,9 +588,9 @@ def cla( r, w, a, b, cin ):
     ww = w
     s = 1
     while ww > 1:
-        j0 = 0
+        j0 = (1 << (s-1)) - 1
         while j0 < (w-1):
-            j1       = j0 + 1
+            j1       = j0 + (1 << (s-1))
             s0       = h[j0]
             s1       = h[j1]
             P(f'wire {r}_s{s}_P{j1} = {r}_s{s0}_P{j0} & {r}_s{s0}_P{j1};' )
