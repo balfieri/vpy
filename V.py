@@ -609,7 +609,7 @@ def cla( r, w, a, b, cin ):
     # sum bits
     wire( f'{r}_S', w )
     for j in range(w):
-        P(f'assign {r}_S[{j}] = {r}_C{j} ^ {r}_s{h[j]}_G{j};' )
+        P(f'assign {r}_S[{j}] = {r}_C{j} ^ ({a}[{j}] ^ {b}[{j}]);')
     return f'{r}_S'
 
 #-------------------------------------------
