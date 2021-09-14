@@ -580,7 +580,7 @@ def cla( r, w, a, b, cin ):
     # stage 0 P/G bits
     s = 0
     for j in range(w):
-        P(f'wire {r}_s{s}_P{j} = {a}[{j}] | {b}[{j}];' )
+        P(f'wire {r}_s{s}_P{j} = {a}[{j}] ^ {b}[{j}];' )
         P(f'wire {r}_s{s}_G{j} = {a}[{j}] & {b}[{j}];' )
         h[j] = 0
 
@@ -609,7 +609,7 @@ def cla( r, w, a, b, cin ):
     # sum bits
     wire( f'{r}_S', w )
     for j in range(w):
-        P(f'assign {r}_S[{j}] = {r}_C{j} ^ ({a}[{j}] ^ {b}[{j}]);')
+        P(f'assign {r}_S[{j}] = {r}_C{j} ^ {r}_s{s0}_P{j};' )
     return f'{r}_S'
 
 #-------------------------------------------
