@@ -30,6 +30,8 @@ def reinit( _clk='clk', _reset_='reset_', _vdebug=True, _vassert=True, _ramgen_c
     global seed_z_init, seed_w_init, seed_i
     global io
     global in_module_header
+    global vlint_off_width, vlint_on_width
+    global vlint_off_unused, vlint_on_unused
     clk = _clk
     reset_ = _reset_
     vdebug = _vdebug
@@ -43,6 +45,10 @@ def reinit( _clk='clk', _reset_='reset_', _vdebug=True, _vassert=True, _ramgen_c
     seed_z_init = 0x12345678
     seed_w_init = 0xbabecaf3
     seed_i = 0
+    vlint_off_width  = 'verilator lint_off WIDTH' 
+    vlint_on_width   = 'verilator lint_on WIDTH' 
+    vlint_off_unused = 'verilator lint_off UNUSED' 
+    vlint_on_unused  = 'verilator lint_on UNUSED' 
 
 #-------------------------------------------
 # Returns number of bits to hold 0 .. n-1
@@ -125,7 +131,14 @@ def module_header_end():
     if ports_s != '': ports_s = f'( {ports_s} )'
 
     P()
+    if ports_s == '': 
+        P(f'`ifndef VERILATOR' )
     P(f'module {module_name}{ports_s};' )
+    if ports_s == '': 
+        P(f'`else' )
+        P(f'module {module_name}( {clk} );' )
+        P(f'input {clk};' )
+        P(f'`endif' )
     P()
     for i in range( len(io) ):
         if io[i]['name'] != '':
@@ -217,6 +230,15 @@ def always_at_posedge( stmt='begin', _clk='' ):
 #-------------------------------------------
 def repl( expr, cnt ):
     return f'{{{cnt}{{{expr}}}}}'
+
+#-------------------------------------------
+# Changed expression width from w to r_w.
+# Pad or truncate.
+#-------------------------------------------
+def resize( expr, w, r_w ):
+    if r_w == w: return expr
+    if r_w < w:  return f'{expr}[{r_w-1}:0]' 
+    return f'{{{r_w-w}\'d0,{expr}}}'
 
 #-------------------------------------------
 # Reverse bits (wires only)
@@ -451,7 +473,7 @@ def wrapped_add( r, w, a, b, c ):
         P(f'wire [{w-1}:0] {r} = {a} + {b};' )
     else:
         P(f'wire [{w}:0] {r}_add = {a} + {b};' )
-        P(f'wire [{w-1}:0] {r} = ({r}_add >= {c}) ? ({r}_add - {c}) : {r}_add;' )
+        P(f'wire [{w-1}:0] {r} = (({r}_add >= {c}) ? ({r}_add - {c}) : {r}_add;' )
     return r
 
 def wrapped_sub( r, w, a, b, c ):
@@ -459,7 +481,7 @@ def wrapped_sub( r, w, a, b, c ):
         P(f'wire [{w-1}:0] {r} = {a} - {b};' )
     else:
         P(f'wire [{w}:0] {r}_sub = {a} - {b};' )
-        P(f'wire [{w-1}:0] {r} = ({r}_sub >= {c}) ? ({r}_sub + {c}) : {r}_sub;' )
+        P(f'wire [{w-1}:0] {r} = (({r}_sub >= {c}) ? ({r}_sub + {c}) : {r}_sub;' )
     return r
 
 #---------------------------------------------------------
@@ -612,7 +634,8 @@ def hash( x, x_w, r_w, r='' ):
         lsb = 0
         while lsb < x_w:        
             msb = min( x_w-1, lsb+r_w-1 )
-            groups.append( f'{x}[{msb}:{lsb}]' )
+            w = msb - lsb + 1
+            groups.append( resize( f'{x}[{msb}:{lsb}]', w, r_w ) )
             lsb = msb + 1
         expr = ' ^ '.join( groups )
     wirea( r, r_w, expr )
@@ -785,10 +808,11 @@ def rotate_right( r, cnt, n, bits, w=1 ):
 #-------------------------------------------
 def count_zeroes( x, x_w, r='' ):
     sum = ""
+    sum_w = log2(x_w+1)
     for i in range( x_w ):
         if i != 0: sum += ' + '
-        sum += f'!{x}[{i}]'
-    if r != '': wirea( r, log2(x_w+1), sum )
+        sum += resize( f'!{x}[{i}]', 1, sum_w )
+    if r != '': wirea( r, sum_w, sum )
     return f'({sum})'
 
 def count_ones( x, x_w, r='' ):
@@ -804,7 +828,10 @@ def count_ones( x, x_w, r='' ):
 #-------------------------------------------
 def count_leading_zeroes( x, x_w, add_reg=True, suff='_ldz' ):
     cnt_w = value_bitwidth( x_w )
-    if add_reg: reg( f'{x}{suff}', cnt_w )
+    if add_reg: 
+        P( f'// {vlint_off_unused}' )
+        reg( f'{x}{suff}', cnt_w )
+        P( f'// {vlint_on_unused}' )
     P(f'always @( {x} ) begin' )
     P(f'    casez( {x} )' )
     for i in range( x_w+1 ):
@@ -820,7 +847,10 @@ def count_leading_zeroes( x, x_w, add_reg=True, suff='_ldz' ):
 
 def count_leading_ones( x, x_w, add_reg=True, suff='_ldo' ):
     cnt_w = value_bitwidth( x_w )
-    if add_reg: reg( f'{x}{suff}', cnt_w )
+    if add_reg: 
+        P( f'// {vlint_off_unused}' )
+        reg( f'{x}{suff}', cnt_w )
+        P( f'// {vlint_on_unused}' )
     P(f'always @( {x} ) begin' )
     P(f'    casez( {x} )' )
     for i in range( x_w+1 ):
@@ -1006,11 +1036,13 @@ def choose_eligible( r, elig_mask, cnt, preferred, gen_preferred=False, adv_pref
     reverse( elig_mask, cnt, f'{elig_mask}_r' )
     prio_elig_mask = rotate_left( f'{r}_prio_elig_mask', cnt, preferred, f'{elig_mask}_r' )
     choice = count_leading_zeroes( prio_elig_mask, cnt )
+    P( f'// {vlint_off_width}' )
     if is_pow2( cnt ):
         wirea( r, w, f'{preferred} + {choice}' )
     else:
         wirea( f'{r}_p', w+1, f'{preferred} + {choice}' )
-        wirea( r, w, f'({r}_p >= {cnt} ? ({r}_p - {cnt}) : {r}_p' )
+        wirea( r, w, f'({r}_p >= {cnt}) ? ({r}_p - {cnt}) : {r}_p' )
+    P( f'// {vlint_on_width}' )
     wirea( f'{elig_mask}_any_vld', 1, f'|{elig_mask}' )
     if gen_preferred:
         always_at_posedge()
@@ -1033,11 +1065,13 @@ def choose_eligible_with_highest_prio( r, vlds, prios, prio_w ):
     choice_w = log2(cnt) if cnt > 1 else 1
     choices = [i for i in range(cnt)]
     i = 0
+    P( f'// {vlint_off_unused}' )
     while cnt > 1: 
         new_vlds    = []
         new_prios   = []
         new_choices = []
-        for j in range((cnt+1) >> 1):
+        depth = (cnt+1) >> 1
+        for j in range(depth):
             i0 = j*2 + 0
             i1 = j*2 + 1
             if i1 < cnt:
@@ -1061,6 +1095,7 @@ def choose_eligible_with_highest_prio( r, vlds, prios, prio_w ):
         choices = new_choices
         i += 1
         cnt = len( choices )
+    P( f'// {vlint_on_unused}' )
     wirea(f'{r}_vld', 1, vlds[0] )
     cnt = len(vlds)
     wirea(f'{r}_i', choice_w, choices[0] )
@@ -1119,24 +1154,27 @@ def choose_eligibles( r, elig_mask, elig_cnt, preferred, req_mask, req_cnt, gen_
 #-------------------------------------------
 def resource_accounting( name, cnt, add_free_cnt=False, set_i_is_free_i=False ):
     P()
+    id_w = log2(cnt) if cnt > 1 else 1
     reg( f'{name}_in_use', cnt )
     reverse( f'{name}_in_use', cnt, f'{name}_in_use_r' )
     count_leading_ones( f'{name}_in_use_r', cnt )
     wirea( f'{name}_free_pvld', 1, f'!(&{name}_in_use)' )
-    wirea( f'{name}_free_i', log2(cnt), f'{name}_in_use_r_ldo' )
+    wirea( f'{name}_free_i', id_w, f'{name}_in_use_r_ldo[{id_w-1}:0]' )
     if add_free_cnt: count_zeroes( f'{name}_in_use', cnt, f'{name}_free_cnt' )
     wire( f'{name}_set_pvld', 1 )
     if set_i_is_free_i:
-        wirea( f'{name}_set_i', log2(cnt), f'{name}_free_i' )
+        wirea( f'{name}_set_i', id_w, f'{name}_free_i' )
     else:
-        wire( f'{name}_set_i', log2(cnt) )
+        wire( f'{name}_set_i', id_w )
     wire( f'{name}_clr_pvld', 1 )
-    wire( f'{name}_clr_i', log2(cnt) )
+    wire( f'{name}_clr_i', id_w )
     always_at_posedge()
     P(f'    if ( !{reset_} ) begin' )
     P(f'        {name}_in_use <= 0;' )
     P(f'    end else if ( {name}_set_pvld || {name}_clr_pvld ) begin' )
+    P(f'        // {vlint_off_width}' )
     P(f'        {name}_in_use <= ({name}_in_use & ~({name}_clr_pvld << {name}_clr_i)) | ({name}_set_pvld << {name}_set_i);' )
+    P(f'        // {vlint_on_width}' )
     P(f'    end' )
     P(f'end')
 
@@ -1655,15 +1693,14 @@ def module_footer( mn ):
     rams = {}
 
 def tb_clk( decl_clk=True, default_cycles_max=2000, perf_op_first=100, perf_op_last=200 ):
-    P(f'' )
+    P()
     P(f'// {clk}' )
     P(f'//' )
+    P(f'`ifndef VERILATOR' )
     if decl_clk: P(f'reg  {clk};' )
     P(f'real {clk}_phase; ' )
     P(f'real {clk}_period; ' )
     P(f'real {clk}_half_period; ' )
-    P(f'reg [31:0] cycle_cnt;' )
-    P(f'reg [31:0] cycles_max;' )
     P(f'' )
     P(f'initial begin ' )
     P(f'    if ( !$value$plusargs( "{clk}_phase=%f", {clk}_phase ) ) begin ' )
@@ -1672,18 +1709,24 @@ def tb_clk( decl_clk=True, default_cycles_max=2000, perf_op_first=100, perf_op_l
     P(f'    if ( !$value$plusargs( "{clk}_period=%f", {clk}_period ) ) begin ' )
     P(f'        {clk}_period = 1.0; ' )
     P(f'    end ' )
-    P(f'    if ( !$value$plusargs( "cycles_max=%f", cycles_max ) ) begin ' )
-    P(f'        cycles_max = {default_cycles_max};' )
-    P(f'    end ' )
     P(f'    {clk}_half_period = {clk}_period / 2.0; ' )
     P(f'    {clk} = 0; ' )
-    P(f'    cycle_cnt = 0;' )
     P(f'    #({clk}_half_period); ' )
     P(f'    #({clk}_phase); ' )
     P(f'    fork ' )
     P(f'        forever {clk} = #({clk}_half_period) ~{clk}; ' )
     P(f'    join ' )
     P(f'end ' )
+    P(f'`endif' )
+    P()
+    P(f'reg [31:0] cycle_cnt;' )
+    P(f'reg [31:0] cycles_max;' )
+    P(f'initial begin' )
+    P(f'    if ( !$value$plusargs( "cycles_max=%f", cycles_max ) ) begin ' )
+    P(f'        cycles_max = {default_cycles_max};' )
+    P(f'    end ' )
+    P(f'    cycle_cnt = 0;' )
+    P(f'end' )
     P()
     always_at_posedge()
     P(f'    if ( cycle_cnt === cycles_max ) begin' )
@@ -1697,30 +1740,39 @@ def tb_clk( decl_clk=True, default_cycles_max=2000, perf_op_first=100, perf_op_l
     P(f'end' )
 
 def tb_reset_( decl_reset_=True ):
-    P(f'' )
+    P()
     P(f'// {reset_} ' )
     P(f'// ' )
     if decl_reset_: P(f'reg {reset_};' )
+    P(f'reg [31:0] {reset_}_cycle_cnt;' )
     P(f'initial begin ' )
     P(f'    {reset_} = 0; ' )
-    P(f'    repeat( 10 ) @( posedge {clk} ); ' )
-    P(f'    {reset_} <= 1; ' )
+    P(f'    {reset_}_cycle_cnt = 0;' )
+    P(f'end ' )
+    P(f'always @( posedge {clk} ) begin' )
+    P(f'    if ( !{reset_} ) begin' )
+    P(f'        {reset_} <= {reset_}_cycle_cnt >= 10;' )
+    P(f'        {reset_}_cycle_cnt <= {reset_}_cycle_cnt + 1;' )
+    P(f'    end ' )
     P(f'end ' )
 
 def tb_dump( module_name ):
+    P()
     P(f'// DUMPs' )
     P(f'//' )
     P(f'initial begin' )
     P(f'`ifdef __NO_DUMP' )
     P(f'`else' )
+    P(f'    if ( $test$plusargs( "dump" ) ) begin' )
     P(f'`ifdef __FSDB' )
-    P(f'    $fsdbDumpfile( "{module_name}.fsdb" );' )
-    P(f'    $fsdbDumpvars( 0, {module_name} );' )
+    P(f'        $fsdbDumpfile( "{module_name}.fsdb" );' )
+    P(f'        $fsdbDumpvars( 0, {module_name} );' )
     P(f'`else' )
-    P(f'    $dumpfile( "{module_name}.lxt" );' )
-    P(f'    $dumpvars( 0, {module_name} ); ' )
+    P(f'        $dumpfile( "{module_name}.lxt" );' )
+    P(f'        $dumpvars( 0, {module_name} ); ' )
     P(f'`endif' )
     P(f'`endif' )
+    P(f'    end' )
     P(f'end ' )
     P()
     P(f'// POWER SIM SAIF CAPTURE' )
@@ -1769,6 +1821,7 @@ def tb_dump( module_name ):
 
 
 def tb_rand_init( default_rand_cycle_cnt=300 ):
+    P()
     P(f'// {clk}_rand_cycle_cnt' )
     P(f'//' )
     P(f'reg [31:0] {clk}_rand_cycle_cnt;' )
@@ -1781,6 +1834,7 @@ def tb_rand_init( default_rand_cycle_cnt=300 ):
 def tb_randbits( sig, _bit_cnt ):
     global seed_z_init, seed_w_init, seed_i
     bit_cnt = _bit_cnt
+    P()
     P(f'// {sig}' )
     P(f'//' )
     P(f'reg [{bit_cnt-1}:0] {sig};' )
