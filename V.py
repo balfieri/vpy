@@ -594,7 +594,7 @@ def cla( r, w, a, b, cin ):
             s0       = h[j0]
             s1       = h[j1]
             P(f'wire {r}_s{s}_P{j1} = {r}_s{s0}_P{j0} & {r}_s{s0}_P{j1};' )
-            P(f'wire {r}_s{s}_G{j1} = {r}_s{s0}_G{j1} | ({r}_s{s0}_G{j0} & {r}_s{s0}_P{j0});' )
+            P(f'wire {r}_s{s}_G{j1} = {r}_s{s0}_G{j1} | ({r}_s{s0}_G{j0} & {r}_s{s0}_P{j1});' )
             h[j1]    = s
             j0      += 1 << s
         ww = (ww+1) >> 1
