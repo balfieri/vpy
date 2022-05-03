@@ -117,7 +117,13 @@ def wirea( name, w, v ):   decla( 'wire', name, w, v )
 def swire( name, w ):      decl( 'wire signed', name, w )
 def swirea( name, w, v ):  decla( 'wire signed', name, w, v )
 def reg( name, w ):        decl( 'reg', name, w )
+def rega( name, w, v ):    
+    reg( name, w )    
+    always_at_posedge( f'{name} <= {v};' )
 def sreg( name, w ):       decl( 'reg signed', name, w )
+def srega( name, w, v ):    
+    sreg( name, w )    
+    always_at_posedge( f'{name} <= {v};' )
 
 def module_header_end():
     global in_module_header
@@ -338,15 +344,19 @@ def iface_inst( pname, wname, sigs, is_io=False, stallable=True ):
         s += f', .{pname}_{sig}({wname}_{sig})'
     P( s )
 
-def iface_concat( iname, sigs, r='' ):
+def iface_concat( iname, sigs, r='', reverse=True ):
     if len(sigs) == 0: S.die( 'iface_concat: empty sigs list' )
     concat = ''
     w = 0
     for sig in sigs:
-        if concat != '': concat += ','
-        if iname != '': concat += f'{iname}_'
-        concat += sig
+        isig = sig if iname == '' else f'{iname}_{sig}'
         w += sigs[sig]
+        if reverse:
+            if concat != '': concat = ',' + concat
+            concat = isig + concat
+        else:
+            if concat != '': concat += ','
+            concat += isig
     if len(sigs) != 1:
         concat = f'{{{concat}}}'
     if r != '':
@@ -355,30 +365,37 @@ def iface_concat( iname, sigs, r='' ):
     else:
         return concat
 
-def iface_unconcat( cname, sigs, oname='' ):
+def iface_unconcat( cname, sigs, oname='', reverse=True ):
     if len(sigs) == 0: S.die( 'iface_unconcat: empty sigs list' )
     w = 0
     for sig in sigs: w += sigs[sig]
+    lsb = 0
     msb = w - 1
     osigs = {}
     for sig in sigs: 
         sw = sigs[sig]
-        lsb = msb - sw + 1
+        if reverse:
+            msb = lsb + sw -1 
+        else:
+            lsb = msb - sw + 1
         v = f'{cname}[{msb}:{lsb}]'
         osigs[sig] = v
         if oname != '': wirea( f'{oname}_{sig}', sw, v )
-        msb = lsb - 1
+        if reverse:
+            lsb += sw
+        else:
+            msb = lsb - 1
     return osigs
 
-def iface_combine( iname, oname, sigs, do_decl=True ):
+def iface_combine( iname, oname, sigs, reverse=True, do_decl=True ):
     if do_decl: wire( oname, iface_width(sigs) )
-    iconcat = iface_concat( iname, sigs )
+    iconcat = iface_concat( iname, sigs, '', reverse )
     assign = 'assign ' if do_decl else '    '
     P(f'{assign}{oname} = {iconcat};' )
 
-def iface_split( iname, oname, sigs, do_decl=True ):
+def iface_split( iname, oname, sigs, reverse=True, do_decl=True ):
     if do_decl: iface_wire( oname, sigs )
-    oconcat = iface_concat( oname, sigs )
+    oconcat = iface_concat( oname, sigs, '', reverse )
     assign = 'assign ' if do_decl else '    '
     P(f'{assign}{oconcat} = {iname};' )
 
@@ -613,13 +630,26 @@ def cla( r, w, a, b, cin ):
     return f'{r}_S'
 
 #-------------------------------------------
+# compute min/max() in hardware
+#-------------------------------------------
+def vmin( a, b, r_w, r='' ):
+    if r == '': r = f'{a}_min_{b}' 
+    wirea( r, r_w, f'({a} <= {b}) ? {a} : {b}' )
+    return r
+
+def vmax( a, b, r_w, r='' ):
+    if r == '': r = f'{a}_max_{b}' 
+    wirea( r, r_w, f'({a} >= {b}) ? {a} : {b}' )
+    return r
+
+#-------------------------------------------
 # compute integer log2( x ) in hardware
 #-------------------------------------------
 def vlog2( x, x_w, r='' ):
     if r == '': r = f'{x}_lg2'
     cnt_w = value_bitwidth( x_w )
     ldz = count_leading_zeroes( x, x_w )
-    P(f'wire [{cnt_w-1}:0] {r} = {cnt_w}\'d{x_w-1} - {ldz};' )
+    wirea( r, cnt_w, f'{cnt_w}\'d{x_w-1} - {ldz}' )
     return r
     
 #-------------------------------------------
@@ -865,6 +895,54 @@ def count_leading_ones( x, x_w, add_reg=True, suff='_ldo' ):
     P(f'    endcase' )        
     P(f'end' )
     return f'{x}{suff}' 
+
+#-------------------------------------------
+# count trailing zeroes/ones using reverse() and previous 
+#-------------------------------------------
+def count_trailing_zeroes( x, x_w, add_reg=True, suff='_trz' ):
+    reverse( x, x_w, f'{x}_rev' )
+    count_leading_zeroes( f'{x}_rev', x_w )
+    cnt_w = value_bitwidth( x_w )
+    if add_reg: 
+        P( f'// {vlint_off_unused}' )
+        reg( f'{x}{suff}', cnt_w )
+        P( f'// {vlint_on_unused}' )
+    P(f'always @( {x}_rev ) {x}{suff} = {x}_rev_ldz;' )
+    return f'{x}{suff}' 
+
+def count_trailing_ones( x, x_w, add_reg=True, suff='_ldo' ):
+    reverse( x, x_w, f'{x}_rev' )
+    count_leading_ones( f'{x}_rev', x_w )
+    cnt_w = value_bitwidth( x_w )
+    if add_reg: 
+        P( f'// {vlint_off_unused}' )
+        reg( f'{x}{suff}', cnt_w )
+        P( f'// {vlint_on_unused}' )
+    P(f'always @( {x}_rev ) {x}{suff} = {x}_rev_ldz;' )
+    return f'{x}{suff}' 
+
+#-------------------------------------------
+# find first one after/before position i
+# after:  ROR by i+1, then use count_trailing_zeroes()
+# before: ROR by i+0, then use count_leading_zeroes()
+# currently x_w must be a power of 2
+#-------------------------------------------
+def first_one_after_i( x, x_w, i, r ):
+    if not is_pow2( x_w ): die( f'first_one_after_i: x_w must be a power-of-2 right now' )
+    ror_w = log2( x_w )
+    wirea( f'{i}_p1', ror_w, f'{i} + 1' )
+    rotate_right( f'{x}_ror', x_w, f'{i}_p1', x )
+    count_trailing_zeroes( f'{x}_ror', x_w )
+    wirea( r, ror_w, f'{x}_ror_trz + {i}_p1' )
+    return r
+
+def first_one_before_i( x, x_w, i, r ):
+    if not is_pow2( x_w ): die( f'first_one_before_i: x_w must be a power-of-2 right now' )
+    ror_w = log2( x_w )
+    rotate_right( f'{x}_ror', x_w, i, x )
+    count_leading_zeroes( f'{x}_ror', x_w )
+    wirea( r, ror_w, f'{x}_ror_ldz + {i}' )
+    return r
 
 #-------------------------------------------
 # determine if a one_hot mask is really a one-hot mask
@@ -1932,7 +2010,7 @@ def tb_ram_write( ram_name, row, iname, sigs, do_decl=True ):
 #-----------------------------------------------------------------
 # Partial testbench for logic in this file.
 #-----------------------------------------------------------------
-def make_V( module_name ):
+def make_v( module_name ):
     pass
 
 def make_tb( name, module_name ):
