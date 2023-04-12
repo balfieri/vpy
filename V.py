@@ -63,8 +63,17 @@ def log2( n ):
         n >>= 1
     return r
 
+#-------------------------------------------
+# Returns power-of-2 >= n
+#-------------------------------------------
+def pow2_ge( n ):
+    return 1 << log2(n)    
+
+#-------------------------------------------
+# Returns True if n is a power of 2
+#-------------------------------------------
 def is_pow2( n ):
-    return (1 << log2(n)) == n
+    return pow2_ge(n) == n
 
 #-------------------------------------------
 # Returns number of bits to hold n, which is max(1, log2( n + 1 ))
@@ -116,6 +125,7 @@ def wire( name, w ):       decl( 'wire', name, w )
 def wirea( name, w, v ):   decla( 'wire', name, w, v )
 def swire( name, w ):      decl( 'wire signed', name, w )
 def swirea( name, w, v ):  decla( 'wire signed', name, w, v )
+def assign( name, w, v ):  P( f'assign {name} = {v};' )
 def reg( name, w ):        decl( 'reg', name, w )
 def rega( name, w, v ):    
     reg( name, w )    
@@ -238,6 +248,22 @@ def always_at_posedge( stmt='begin', _clk='' ):
 #-------------------------------------------
 def repl( expr, cnt ):
     return f'{{{cnt}{{{expr}}}}}'
+
+#-------------------------------------------
+# Returns all 0's
+#-------------------------------------------
+def all_zeroes( cnt ):
+    r = f'{cnt}\'b' 
+    for i in range(cnt): r += '0'
+    return r
+
+#-------------------------------------------
+# Returns all 1's
+#-------------------------------------------
+def all_ones( cnt ):
+    r = f'{cnt}\'b' 
+    for i in range(cnt): r += '1'
+    return r
 
 #-------------------------------------------
 # Changed expression width from w to r_w.
@@ -797,26 +823,41 @@ def mux_subword( r, subword_w, sel, word, word_w, stride=0, lsb=0, add_reg=True 
 #-------------------------------------------
 def muxN( sigs, sel, vals, add_reg=True ):
     sw = log2( len(vals) )
-    if add_reg:
+    if len(vals) == 1:
+        if add_reg:
+            j = 0
+            for sig in sigs:
+                w = sigs[sig]
+                wirea( sig, w, vals[0][j] )
+                j += 1
+        else:
+            P(f'always @( * ) begin' )
+            j = 0
+            for sig in sigs:
+                P(f'    {sig} = {vals[0][j]};' )
+                j += 1
+            P(f'end' )
+    else:
+        if add_reg:
+            for sig in sigs:
+                w = sigs[sig]
+                P(f'reg [{w-1}:0] {sig};' )
+            P(f'always @( * ) begin' )
+        P(f'    case( {sel} )' )
+        for i in range(len(vals)):
+            P(f'        {sw}\'d{i}: begin' )
+            j = 0
+            for sig in sigs:
+                P(f'            {sig} = {vals[i][j]};' )
+                j += 1
+            P(f'            end' )
+        P(f'        default: begin' )
         for sig in sigs:
-            w = sigs[sig]
-            P(f'reg [{w-1}:0] {sig};' )
-        P(f'always @( * ) begin' )
-    P(f'    case( {sel} )' )
-    for i in range(len(vals)):
-        P(f'        {sw}\'d{i}: begin' )
-        j = 0
-        for sig in sigs:
-            P(f'            {sig} = {vals[i][j]};' )
-            j += 1
+            P(f'            {sig} = 0;' )
         P(f'            end' )
-    P(f'        default: begin' )
-    for sig in sigs:
-        P(f'            {sig} = 0;' )
-    P(f'            end' )
-    P(f'    endcase' )
-    if add_reg:
-        P(f'end' )
+        P(f'    endcase' )
+        if add_reg:
+            P(f'end' )
 
 #-------------------------------------------
 # rotate bits left or right by N*w (useful for round-robin scheduling)
@@ -834,6 +875,41 @@ def rotate_right( r, cnt, n, bits, w=1 ):
     for i in range( cnt ):
         vals.append( bits if i == 0 else f'{{{bits}[{i*w-1}:0], {bits}[{tw-1}:{i*w}]}}' )
     return muxa( r, tw, n, vals )
+
+#-------------------------------------------
+# construct static bit masks
+#-------------------------------------------
+def hex_const( v, w ):
+    hw = (w+3) >> 2
+    return f'{w}\'h' + (f'%0{hw}x' % v)
+
+def bits_lt( b, w ):
+    b = min( b, w )
+    r = 0
+    for i in range(0,b):
+        r |= 1 << i
+    return hex_const( r, w )
+
+def bits_le( b, w ):
+    b = min( b, w )
+    r = 0
+    for i in range(0,b+1):
+        r |= 1 << i
+    return hex_const( r, w )
+
+def bits_gt( b, w ):
+    b = min( b, w )
+    r = 0
+    for i in range(b+1,w):
+        r |= 1 << i
+    return hex_const( r, w )
+
+def bits_ge( b, w ):
+    b = min( b, w )
+    r = 0
+    for i in range(b,w):
+        r |= 1 << i
+    return hex_const( r, w )
 
 #-------------------------------------------
 # count zeroes/ones
@@ -907,7 +983,7 @@ def count_trailing_zeroes( x, x_w, add_reg=True, suff='_trz' ):
         P( f'// {vlint_off_unused}' )
         reg( f'{x}{suff}', cnt_w )
         P( f'// {vlint_on_unused}' )
-    P(f'always @( {x}_rev ) {x}{suff} = {x}_rev_ldz;' )
+    P(f'always @( * ) {x}{suff} = {x}_rev_ldz;' )
     return f'{x}{suff}' 
 
 def count_trailing_ones( x, x_w, add_reg=True, suff='_ldo' ):
@@ -918,7 +994,7 @@ def count_trailing_ones( x, x_w, add_reg=True, suff='_ldo' ):
         P( f'// {vlint_off_unused}' )
         reg( f'{x}{suff}', cnt_w )
         P( f'// {vlint_on_unused}' )
-    P(f'always @( {x}_rev ) {x}{suff} = {x}_rev_ldz;' )
+    P(f'always @( * ) {x}{suff} = {x}_rev_ldz;' )
     return f'{x}{suff}' 
 
 #-------------------------------------------
@@ -969,6 +1045,9 @@ def binary_to_one_hot( b, mask_w, r='', pvld='' ):
 # assumes: at most one bit is set, so can use an OR tree
 #-------------------------------------------
 def one_hot_to_binary( mask, mask_w, r, r_any_vld='' ):
+    if mask_w == 1:
+        wirea( r, 1, f'1\'d0' )
+        return
     r_w = log2( mask_w )
     expr = ''
     for i in range(mask_w):
@@ -1510,20 +1589,22 @@ def fifo( iname, oname, sigs, pvld, prdy, depth, m_name='', u_name='', with_wr_p
 
 def make_fifo( module_name ):
     info = fifos[module_name]
-    P()
-    P(f'module {module_name}( {clk}, {reset_}, wr_pvld, wr_prdy, wr_pd, rd_pvld, rd_prdy, rd_pd );' )
-    P()
+    
+    module_header_begin( module_name )
+
     input(  clk,       1 )
     input(  reset_,    1 )
-    P()
+   
     input(  'wr_pvld',   1 )
     output( 'wr_prdy',   1 )
     input(  'wr_pd',     info['w'] )
-    P()
+    
     output( 'rd_pvld',   1 )
     input(  'rd_prdy',   1 )
     output( 'rd_pd',     info['w'] )
-    P()
+    
+    module_header_end()
+
     depth = info['depth']
     if depth == 0:
         P(f'assign {wr_prdy,rd_pvld,rd_pd} = {rd_prdy,wr_pvld,wr_pd};' )
@@ -1994,12 +2075,17 @@ def tb_ram_decl( ram_name, d, sigs ):
     w = iface_width( sigs )
     P(f'reg [{w-1}:0] {ram_name}[0:{d-1}];' )
 
-def tb_ram_file( ram_name, file_name, sigs, is_hex_data=True ):
+def tb_ram_file( ram_name, file_name, sigs, is_hex_data=True, show_raw_contents=False ):
     d = S.file_line_cnt( file_name )
     if d == 0: S.die( f'{file_name} is empty' )
     tb_ram_decl( ram_name, d, sigs )
     hb = 'h' if is_hex_data else 'b'
     P(f'initial $readmem{hb}( "{file_name}", {ram_name} );' )
+    if show_raw_contents:
+        w = iface_width( sigs )
+        for i in range(d):
+            wirea( f'{ram_name}{i}', w, f'{ram_name}[{i}]' )
+    return d
 
 def tb_ram_read( ram_name, row, oname, sigs, do_decl=True ):
     iface_split( f'{ram_name}[{row}]', oname, sigs, do_decl )
