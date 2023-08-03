@@ -1993,7 +1993,9 @@ def tb_rand_init( default_rand_cycle_cnt=300 ):
     P()
     P(f'// {clk}_rand_cycle_cnt' )
     P(f'//' )
+    P(f'// {vlint_off_unused}' ) 
     P(f'reg [31:0] {clk}_rand_cycle_cnt;' )
+    P(f'// {vlint_on_unused}' ) 
     P(f'initial begin' )
     P(f'    if ( !$value$plusargs( "{clk}_rand_cycle_cnt=%f", {clk}_rand_cycle_cnt ) ) begin ' )
     P(f'        {clk}_rand_cycle_cnt = {default_rand_cycle_cnt}; ' )
@@ -2017,6 +2019,7 @@ def tb_randbits( sig, _bit_cnt ):
         and_mask = '' if this_bit_cnt == 32 else f' & ((1 << {this_bit_cnt})-1)' 
         P(f'reg [31:0] {sigi}_m_z;' )
         P(f'reg [31:0] {sigi}_m_w;' )
+        P(f'// {vlint_off_width}' )
         always_at_posedge()
         P(f'    if ( !{reset_} ) begin' )
         z_init = '32\'h%x' % seed_z_init
@@ -2030,6 +2033,7 @@ def tb_randbits( sig, _bit_cnt ):
         P(f'        {sig}[{msb}:{lsb}] <= (({sigi}_m_w << 16) + {sigi}_m_w){and_mask};' )
         P(f'    end' )
         P(f'end' )
+        P(f'// {vlint_on_width}' )
         seed_z_init += 13
         seed_w_init += 57
         i += 1
