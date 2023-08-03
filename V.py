@@ -49,8 +49,8 @@ def reinit( _clk='clk', _reset_='reset_', _vdebug=True, _vassert=True, _ramgen_c
     custom_cla = False
     vlint_off_width  = 'verilator lint_off WIDTH' 
     vlint_on_width   = 'verilator lint_on WIDTH' 
-    vlint_off_unused = 'verilator lint_off UNUSED' 
-    vlint_on_unused  = 'verilator lint_on UNUSED' 
+    vlint_off_unused = 'verilator lint_off UNUSEDSIGNAL' 
+    vlint_on_unused  = 'verilator lint_on UNUSEDSIGNAL' 
 
 #-------------------------------------------
 # Returns number of bits to hold 0 .. n-1
@@ -355,6 +355,10 @@ def iface_reg( name, sigs, is_io=False, stallable=True ):
         if stallable: decl( 'reg', name + '_prdy', 1, False )
         decl( 'reg', name + '_pvld', 1, False )
     iface_decl( 'reg', name, sigs, False, stallable )
+
+def iface_reg_array( name, cnt, sigs, is_io=False, stallable=True, suff='' ):
+    for i in range(cnt):
+        iface_reg( f'{name}{suff}{i}', sigs, is_io, stallable )
 
 def iface_reg_assign( lname, rname, sigs, indent='        ' ):
     for sig in sigs:
@@ -1185,7 +1189,9 @@ def choose_eligible( r, elig_mask, cnt, preferred, gen_preferred=False, adv_pref
     if cnt <= 0: S.die( f'choose_eligible: cnt is {cnt}' )
     if cnt == 1:
         # trivial case
+        P( f'// {vlint_off_unused}' )
         wirea( f'{elig_mask}_any_vld', 1, f'{elig_mask}' )
+        P( f'// {vlint_on_unused}' )
         wirea( r, 1, '1\'d0' )
         return r
 
@@ -1784,6 +1790,7 @@ def cache_tags( name, addr_w, tag_cnt, req_cnt, ref_cnt_max, incr_ref_cnt_max=1,
     P()
     P(f'// {name} ref_cnt updates' )
     P(f'//' )
+    P(f'// {vlint_off_width}' )
     always_at_posedge()
     P(f'    if ( !{reset_} ) begin' )
     for i in range(tag_cnt): 
@@ -1804,6 +1811,7 @@ def cache_tags( name, addr_w, tag_cnt, req_cnt, ref_cnt_max, incr_ref_cnt_max=1,
         P(f'        end' )
     P(f'    end' )
     P(f'end' )
+    P(f'// {vlint_on_width}' )
 
     P()
     P(f'// {name} filled updates' )
