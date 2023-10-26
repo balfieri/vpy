@@ -1,4 +1,4 @@
-# Copyright (c) 2017-2021 Robert A. Alfieri
+# Copyright (c) 2017-2024 Robert A. Alfieri
 # 
 # Permission is hereby granted, free of charge, to any person obtaining a copy
 # of this software and associated documentation files (the "Software"), to deal
@@ -25,13 +25,19 @@ import os
 import os.path
 import subprocess
 import re
+import random
+
+die_with_exception = False
 
 #-------------------------------------------
-# Abort with message.
+# Die with message.
 #-------------------------------------------
 def die( msg ):
     print( f'ERROR: {msg}' )
-    sys.exit( 1 )
+    if die_with_exception: 
+        raise AssertionError
+    else:
+        sys.exit( 1 )
 
 #-------------------------------------------
 # Run command with stderr mapped to stdout, die if it fails, then return stdout as string.
@@ -62,6 +68,18 @@ def match( s, pattern ):
 
 def subst( s, pattern, subst ):
     return re.sub( pattern, subst, s )
+
+#-------------------------------------------
+# Random numbers
+#-------------------------------------------
+def rand_n( n ):
+    return random.randint( 0, n-1 )
+
+def rand_bits( w ):
+    return rand_n( 1 << w )
+
+def heads():
+    return rand_n( 2 ) == 1
 
 #-------------------------------------------
 # Return True if file exists

@@ -1,4 +1,4 @@
-# Copyright (c) 2017-2021 Robert A. Alfieri
+# Copyright (c) 2017-2024 Robert A. Alfieri
 # 
 # Permission is hereby granted, free of charge, to any person obtaining a copy
 # of this software and associated documentation files (the "Software"), to deal
@@ -27,7 +27,7 @@ P = print
 def reinit( _clk='clk', _reset_='reset_', _vdebug=True, _vassert=True, _ramgen_cmd='' ):
     global clk, reset_, vdebug, vassert, ramgen_cmd
     global module_name, rams, fifos
-    global seed_z_init, seed_w_init, seed_i
+    global default_rand_seed_z_init, default_rand_seed_w_init, rand_seed_z_init_addend, rand_seed_w_init_addend, seed_i
     global custom_cla
     global io
     global in_module_header
@@ -43,8 +43,10 @@ def reinit( _clk='clk', _reset_='reset_', _vdebug=True, _vassert=True, _ramgen_c
     in_module_header = False
     rams = {}
     fifos = {}
-    seed_z_init = 0x12345678
-    seed_w_init = 0xbabecaf3
+    default_rand_seed_z_init = "32'h12345678"
+    default_rand_seed_w_init = "32'hbabecaf3"
+    rand_seed_z_init_addend = 0
+    rand_seed_w_init_addend = 0
     seed_i = 0
     custom_cla = False
     vlint_off_width  = 'verilator lint_off WIDTH' 
@@ -944,7 +946,7 @@ def count_leading_zeroes( x, x_w, add_reg=True, suff='_ldz' ):
         P( f'// {vlint_off_unused}' )
         reg( f'{x}{suff}', cnt_w )
         P( f'// {vlint_on_unused}' )
-    P(f'always @( {x} ) begin' )
+    P(f'always @( * ) begin' )
     P(f'    casez( {x} )' )
     for i in range( x_w+1 ):
         case = f'{x_w}\'b'
@@ -963,7 +965,7 @@ def count_leading_ones( x, x_w, add_reg=True, suff='_ldo' ):
         P( f'// {vlint_off_unused}' )
         reg( f'{x}{suff}', cnt_w )
         P( f'// {vlint_on_unused}' )
-    P(f'always @( {x} ) begin' )
+    P(f'always @( * ) begin' )
     P(f'    casez( {x} )' )
     for i in range( x_w+1 ):
         case = f'{x_w}\'b'
@@ -1042,6 +1044,7 @@ def binary_to_one_hot( b, mask_w, r='', pvld='' ):
     mask = f'{mask_w}\'d1 << {b}'
     if pvld != '': mask = f'({mask}) & ' + repl( pvld, mask_w )
     if r != '': wirea( r, mask_w, mask )
+    return r
 
 #-------------------------------------------
 # get index of 1 bit in one-hot mask
@@ -1832,7 +1835,7 @@ def cache_tags( name, addr_w, tag_cnt, req_cnt, ref_cnt_max, incr_ref_cnt_max=1,
     dassert_no_x( f'{name}__fills' )
     dassert_no_x( f'{name}__decrs' )
     dassert( f'({name}__hits & {name}__alloc_avail_chosen_one_hot) === {tag_cnt}\'d0', f'{name} has hit and alloc to the same slot' )
-    dassert( f'({name}__fills & {name}__filleds) === {tag_cnt}\'d0', 'f{name} has fill of already filled slot' )
+    dassert( f'({name}__fills & {name}__filleds) === {tag_cnt}\'d0', f'{name} has fill of already filled slot' )
     dassert( f'({name}__decrs & {name}__vlds) === {name}__decrs', f'{name} has decr-ref-cnt of slot with ref_cnt==0' )
     expr = ''
     for i in range(tag_cnt-1):
@@ -1925,7 +1928,7 @@ def tb_reset_( decl_reset_=True ):
     P(f'    end ' )
     P(f'end ' )
 
-def tb_dump( module_name ):
+def tb_dump( module_name, include_saif=True ):
     P()
     P(f'// DUMPs' )
     P(f'//' )
@@ -1937,12 +1940,18 @@ def tb_dump( module_name ):
     P(f'        $fsdbDumpfile( "{module_name}.fsdb" );' )
     P(f'        $fsdbDumpvars( 0, {module_name} );' )
     P(f'`else' )
+    P(f'`ifdef __VCD' )
+    P(f'        $dumpfile( "{module_name}.vcd" );' )
+    P(f'`else' )
     P(f'        $dumpfile( "{module_name}.lxt" );' )
+    P(f'`endif' )
     P(f'        $dumpvars( 0, {module_name} ); ' )
     P(f'`endif' )
-    P(f'`endif' )
     P(f'    end' )
+    P(f'`endif' )
     P(f'end ' )
+
+    if not include_saif: return
     P()
     P(f'// POWER SIM SAIF CAPTURE' )
     P(f'//' )
@@ -1995,15 +2004,23 @@ def tb_rand_init( default_rand_cycle_cnt=300 ):
     P(f'//' )
     P(f'// {vlint_off_unused}' ) 
     P(f'reg [31:0] {clk}_rand_cycle_cnt;' )
+    P(f'reg [31:0] {clk}_rand_seed_z_init;' )
+    P(f'reg [31:0] {clk}_rand_seed_w_init;' )
     P(f'// {vlint_on_unused}' ) 
     P(f'initial begin' )
     P(f'    if ( !$value$plusargs( "{clk}_rand_cycle_cnt=%f", {clk}_rand_cycle_cnt ) ) begin ' )
     P(f'        {clk}_rand_cycle_cnt = {default_rand_cycle_cnt}; ' )
     P(f'    end ' )
+    P(f'    if ( !$value$plusargs( "{clk}_rand_seed0=%d", {clk}_rand_seed_z_init ) ) begin ' )
+    P(f'        {clk}_rand_seed_z_init = {default_rand_seed_z_init}; ' )
+    P(f'    end ' )
+    P(f'    if ( !$value$plusargs( "{clk}_rand_seed1=%d", {clk}_rand_seed_w_init ) ) begin ' )
+    P(f'        {clk}_rand_seed_w_init = {default_rand_seed_w_init}; ' )
+    P(f'    end ' )
     P(f'end' )
 
 def tb_randbits( sig, _bit_cnt ):
-    global seed_z_init, seed_w_init, seed_i
+    global rand_seed_z_init_addend, rand_seed_w_init_addend, seed_i
     bit_cnt = _bit_cnt
     P()
     P(f'// {sig}' )
@@ -2022,20 +2039,17 @@ def tb_randbits( sig, _bit_cnt ):
         P(f'// {vlint_off_width}' )
         always_at_posedge()
         P(f'    if ( !{reset_} ) begin' )
-        z_init = '32\'h%x' % seed_z_init
-        w_init = '32\'h%x' % seed_w_init
-        P(f'        {sigi}_m_z <= {z_init};' )
-        P(f'        {sigi}_m_w <= {w_init};' )
-        P(f'        {sig}[{msb}:{lsb}] <= (({w_init} << 16) + {w_init}){and_mask};' ) 
+        P(f'        {sigi}_m_z <= {clk}_rand_seed_z_init + {rand_seed_z_init_addend};' )
+        P(f'        {sigi}_m_w <= {clk}_rand_seed_w_init + {rand_seed_w_init_addend};' )
         P(f'    end else begin' )
         P(f'        {sigi}_m_z <= 36969 * {sigi}_m_z[15:0] + {sigi}_m_z[31:16];' )
         P(f'        {sigi}_m_w <= 18000 * {sigi}_m_w[15:0] + {sigi}_m_w[31:16];' )
-        P(f'        {sig}[{msb}:{lsb}] <= (({sigi}_m_w << 16) + {sigi}_m_w){and_mask};' )
         P(f'    end' )
+        P(f'    {sig}[{msb}:{lsb}] <= (({sigi}_m_w << 16) + {sigi}_m_w){and_mask};' )
         P(f'end' )
         P(f'// {vlint_on_width}' )
-        seed_z_init += 13
-        seed_w_init += 57
+        rand_seed_z_init_addend += 13
+        rand_seed_w_init_addend += 57
         i += 1
     seed_i += 1
 
