@@ -1,0 +1,16 @@
+*.DS_Store
+*.exe
+*.o
+*.x
+*.exr
+*.out
+*.dout
+*.gz
+*.save
+*.v
+*.vvp
+*.vcd
+*.lxt
+*.stackdump
+__pycache__
+tb_l0c

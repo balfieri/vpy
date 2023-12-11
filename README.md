@@ -3,6 +3,7 @@ For now, you'll need to read the comments in V.py to see what is available.
 
 S.py is a Python module that has a few system helper functions unrelated to Verilog.
 
+IN PROGRESS: Adding some real example designs and testbenches that run and pass simulations.
 
 <pre>
 import S
