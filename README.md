@@ -8,7 +8,7 @@ S.py is a Python module that has a few system helper functions unrelated to Veri
 The following examples are provided. Each has an associated testbench around it. So if the design is
 in foo.py, the generated files will be foo.v (design) and tb_foo.v (testbench):
 
-* l0c.py - L0 read-only cache and
+* l0c.py - L0 read-only non-blocking cache with tags and data in flops 
 
 To build all examples using the Makefile and gen.py script, type:
 
