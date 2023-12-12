@@ -10,7 +10,7 @@ in foo.py, the generated files will be foo.v (design) and tb_foo.v (testbench):
 
 * l0c.py - L0 read-only non-blocking cache with tags and data in flops 
 
-To build all examples using the Makefile and gen.py script, type:
+To build all examples using the canonical Makefile and gen.py script, type:
 
 <pre>
 make
@@ -23,15 +23,13 @@ which uses the vsim.py script, type:
 make dtest
 </pre>
 
-The examples all use a configuration file, C.py, that parameterizes the example designs. This is a convention. 
+The examples all use a configuration file, C.py, that parameterizes the example designs. This is my convention. 
 So each design will typically do this at the beginning:
 
 <pre>
 import S                # system utility functions
 import V                # the guts of VPY
 import C                # conventional config file
-
-V.reinit()
 ...
 </pre>
 
