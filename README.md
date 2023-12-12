@@ -3,12 +3,34 @@ For now, you'll need to read the comments in V.py to see what is available.
 
 S.py is a Python module that has a few system helper functions unrelated to Verilog.
 
-IN PROGRESS: Adding some real example designs and testbenches that run and pass simulations.
+# Examples
+
+The following examples are provided. Each has an associated testbench around it. So if the design is
+in foo.py, the generated files will be foo.v (design) and tb_foo.v (testbench):
+
+* l0c.py - L0 read-only cache and
+
+To build all examples using the Makefile and gen.py script, type:
 
 <pre>
-import S
-import V
- 
+make
+</pre>
+
+Assuming you have Icarus Verilog installed (iverilog), to run all examples with a .vcd dump, 
+which uses the vsim.py script, type:
+
+<pre>
+make dtest
+</pre>
+
+The examples all use a configuration file, C.py, that parameterizes the example designs. This is a convention. 
+So each design will typically do this at the beginning:
+
+<pre>
+import S                # system utility functions
+import V                # the guts of VPY
+import C                # conventional config file
+
 V.reinit()
 ...
 </pre>

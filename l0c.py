@@ -1,6 +1,6 @@
 # l0c.py - L0 Cache
 #
-# Simple L0 Cache - initially with just tags, then more stuff as we go
+# Simple L0 Cache - all in flops
 #
 import S
 import V
@@ -13,6 +13,19 @@ def reinit():
     pass
 
 def header( module_name ):
+    P(f'// L0 read-only cache with the following properties:' )
+    P(f'// - tags and data kept in flops' )
+    P(f'// - fully-associative' )
+    P(f'// - {C.l0c_slot_cnt} lines, {C.l0c_line_w}-bit line width, which is the same as the per-request data word width' )
+    P(f'// - {C.addr_w}-bit request byte address, but this is shorted according to the request word width ' )
+    P(f'// - each request has an associated {C.l0c_req_id_w}-bit req_id to help the requestor identify the return information' )
+    P(f'// - requests are non-blocking, and a req status return interface indicates is_hit, is_miss, and must_retry' )
+    P(f'// - must_retry=1 means the cache cannot currently allocate a line OR a hit-under-miss situation' )
+    P(f'// - any must_retry request must be retried by the requestor, obviously' )
+    P(f'// - data is returned out-of-order, consistent with non-blocking requests' )
+    P(f'// - {C.mem_dat_w}-bit memory read return data width' )
+    P(f'// - maximum per-line reference count of {C.l0c_ref_cnt_max}' )
+    P(f'//' )
     V.module_header_begin( module_name )
     V.input( f'{V.clk}', 1 )
     V.input( f'{V.reset_}', 1 )
@@ -128,6 +141,14 @@ def make_l0c( module_name ):
     V.module_footer( module_name )
 
 def make_tb_l0c( name, module_name ):
+    P(f'// Testbench for {module_name}.v with the following properties beyond those of the cache:' )
+    P(f'// - issues a plusarg-selectable number of requests (default: 100)' )
+    P(f'// - randomly selects an address from {C.l0c_tb_addr_cnt} possible random addresses (to induce hits)' )
+    P(f'// - supplies a memory model that returns data that includes the memory address and line subword index for each line data' )
+    P(f'// - checks that returned data from cache matches the expected data for the line' )
+    P(f'// - randomly adds bubbles in the request stream' )
+    P(f'// - randomly stalls the memory requests out of the cache' )
+    P(f'//' )
     V.module_header_begin( f'tb_{module_name}' )
     V.module_header_end()
     P()
