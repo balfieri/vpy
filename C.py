@@ -12,6 +12,7 @@ def reinit():
     global l0c_slot_cnt, l0c_slot_id_w, l0c_line_w, l0c_req_id_w, l0c_req_id_cnt
     global l0c_addr_w, l0c_dat_w, l0c_ref_cnt_max, l0c_subword_w, l0c_subword_cnt, l0c_mem_tag_id_w
     global xx2l0c, l0c2xx_status, l0c2xx_dat, l0c2mem, mem2l0c
+    global l0c2xx_tags_status, xx2loc_tags_fill
     global l0c_tb_addr_cnt, l0c_tb_addr_id_w
 
     # VERILOG
@@ -46,6 +47,9 @@ def reinit():
                                   'is_hit':             1,                      # returning data soon
                                   'is_miss':            1,
                                   'must_retry':         1 }                     # hit-under-miss or can't allocate -> punt to client
+    l0c2xx_tags_status        = l0c2xx_status.copy()
+    l0c2xx_tags_status['tag_i'] = l0c_slot_id_w
+    xx2l0c_tags_fill          = { 'tag_i':              l0c_slot_id_w }
     l0c2xx_dat                = { 'req_id':             l0c_req_id_w,
                                   'dat':                l0c_dat_w }
 
