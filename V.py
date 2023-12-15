@@ -1838,7 +1838,7 @@ def cache_tags( name, addr_w, tag_cnt, req_cnt, ref_cnt_max, incr_ref_cnt_max=1,
     dassert( f'({name}__fills & {name}__filleds) === {tag_cnt}\'d0', f'{name} has fill of already filled slot' )
     dassert( f'({name}__decrs & {name}__vlds) === {name}__decrs', f'{name} has decr-ref-cnt of slot with ref_cnt==0' )
     for i in range(tag_cnt):
-        dassert( f'{name}__ref_cnt{i} !== 0 || {name}_decr{r}__one_hot[{i}] === 0', f'{name}__ref_cnt{i} underflow' )
+        dassert( f'{name}__ref_cnt{i} !== 0 || {name}_decr{r}__one_hot[{i}] === 0 || {name}_req{r}__hit_one_hot[{i}] == 1', f'{name}__ref_cnt{i} underflow' )
         dassert( f'{name}__alloc_avail_chosen_one_hot[{i}] === 0 || {name}_req{r}__hit_one_hot[{i}] === 0', f'{name}__ref_cnt{i} alloc and hit at same time' )
         dassert( f'{name}__ref_cnt{i} !== {ref_cnt_max} || ({name}__alloc_avail_chosen_one_hot[{i}] === 0 && {name}_req{r}__hit_one_hot[{i}] === 0)', f'{name}__ref_cnt{i} overflow' )
     expr = ''
