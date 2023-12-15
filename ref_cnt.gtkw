@@ -1,0 +1,65 @@
+[*]
+[*] GTKWave Analyzer v3.4.0 (w)1999-2022 BSI
+[*] Fri Dec 15 21:34:40 2023
+[*]
+[dumpfile] "/Users/bobbo/Code/vpy/tb_l0c.vcd"
+[dumpfile_mtime] "Thu Dec 14 19:38:27 2023"
+[dumpfile_size] 17062
+[savefile] "/Users/bobbo/Code/vpy/ref_cnt.gtkw"
+[timestart] 0
+[size] 2912 663
+[pos] 479 324
+*-10.851489 17000 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0
+[markername] AA
+[markername] BB
+[markername] CC
+[markername] DD
+[markername] EE
+[markername] FF
+[markername] GG
+[markername] HH
+[markername] II
+[markername] JJ
+[markername] KK
+[markername] LL
+[markername] MM
+[markername] NN
+[markername] OO
+[markername] PP
+[markername] QQ
+[markername] RR
+[markername] SS
+[markername] TT
+[markername] UU
+[markername] VV
+[markername] WW
+[markername] XX
+[markername] YY
+[markername] ZZ
+[treeopen] tb_l0c.
+[sst_width] 253
+[signals_width] 474
+[sst_expanded] 1
+[sst_vpaned_height] 353
+@28
+tb_l0c.u_l0c.lclk
+tb_l0c.u_l0c.tags__ref_cnt1[2:0]
+tb_l0c.u_l0c.tags__alloc_avail_chosen_one_hot[1:0]
+tb_l0c.u_l0c.tags_req0__hit_one_hot[1:0]
+tb_l0c.u_l0c.tags_decr0__one_hot[1:0]
+tb_l0c.u_l0c.tags_decr0_pvld
+tb_l0c.u_l0c.tags_decr0_tag_i
+tb_l0c.u_l0c.tags_req0_pvld
+tb_l0c.u_l0c.tags_req0_status[1:0]
+tb_l0c.u_l0c.TAGS_HIT[1:0]
+tb_l0c.u_l0c.TAGS_HIT_BEING_FILLED[1:0]
+tb_l0c.u_l0c.TAGS_MISS[1:0]
+tb_l0c.u_l0c.TAGS_MISS_CANT_ALLOC[1:0]
+tb_l0c.u_l0c.tags_req0_pvld
+@29
+tb_l0c.u_l0c.tags_req0_tag_i
+@28
+tb_l0c.u_l0c.tags_req0__hit_vld
+tb_l0c.u_l0c.tags_req0_hit_and_filled
+[pattern_trace] 1
+[pattern_trace] 0
