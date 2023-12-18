@@ -33,7 +33,7 @@ def reinit():
     l0c_req_id_w              = 3
     l0c_req_id_cnt            = 1 << l0c_req_id_w
     l0c_addr_w                = addr_w - V.log2( l0c_dat_w >> 3 )
-    l0c_ref_cnt_max           = 4
+    l0c_ref_cnt_max           = 2
     l0c_subword_w             = l0c_addr_w - mem_addr_w
     l0c_subword_cnt           = 1 << l0c_subword_w
     l0c_mem_tag_id_w          = l0c_req_id_w + l0c_subword_w + l0c_slot_id_w
