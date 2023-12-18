@@ -38,7 +38,10 @@ def header( module_name ):
     V.iface_stage( f'xx2l0c_tags_fill_dat', f'xx2l0c_tags_fill_dat_d', C.xx2l0c_tags_fill_dat, 'pvld', '', full_handshake=False, do_dprint=False )
     V.iface_stage( f'xx2l0c_tags_hit_dat', f'xx2l0c_tags_hit_dat_d', C.xx2l0c_tags_hit_dat, 'pvld', '', full_handshake=False, do_dprint=False )
     P()
-    V.iface_dprint( f'l0c2xx_tags_status', C.l0c2xx_tags_status, f'l0c2xx_tags_status_pvld' )
+    V.iface_dprint( f'xx2l0c',               C.xx2l0c,               f'xx2l0c_pvld', f'xx2l0c_prdy' )
+    V.iface_dprint( f'l0c2xx_tags_status',   C.l0c2xx_tags_status,   f'l0c2xx_tags_status_pvld' )
+    V.iface_dprint( f'xx2l0c_tags_fill_dat', C.xx2l0c_tags_fill_dat, f'xx2l0c_tags_fill_dat_pvld' )
+    V.iface_dprint( f'xx2l0c_tags_hit_dat',  C.xx2l0c_tags_hit_dat,  f'xx2l0c_tags_hit_dat_pvld' )
   
 def inst_l0c_tags( module_name, inst_name, do_decls ):
     if do_decls: 
