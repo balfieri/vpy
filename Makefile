@@ -36,6 +36,7 @@ endif
 #
 MODULES=\
 	l0c \
+	l0c_tags \
 
 #------------------------------------------------------------------------------
 # The following rules shouldn't need to change.
@@ -53,7 +54,7 @@ test: $(TEST_OUTS)
 
 dtest: $(TEST_DOUTS)
 
-tb_%.v: $(DEPS) %.v
+tb_%.v: %.v
 
 %.v: $(DEPS)
 	$(PYTHON3) gen.py $(patsubst %.v,%, $@) &> $@

@@ -67,8 +67,6 @@ def make_l0c_tags( module_name ):
     V.wirea( f'tags_req0_addr', C.l0c_addr_w, f'xx2l0c_d_addr' )
     V.wire( f'tags_decr0_pvld', 1 )
     V.wire( f'tags_decr0_tag_i', C.l0c_slot_id_w )
-    V.wire( f'tags_fill_pvld', 1 )
-    V.wire( f'tags_fill_tag_i', C.l0c_slot_id_w )
     V.wirea( f'tags_fill_pvld', 1, f'xx2l0c_tags_fill_dat_d_pvld' )
     V.wirea( f'tags_fill_tag_i', C.l0c_slot_id_w, f'xx2l0c_tags_fill_dat_d_tag_i' )
 
@@ -219,8 +217,10 @@ def make_tb_l0c_tags( name, module_name ):
     P( f'assign hit_dat_mask  = hit_issued_mask;' )
     P( f'assign xx2l0c_tags_fill_dat_pvld = fill_elig_any_vld;' )
     P( f'assign xx2l0c_tags_hit_dat_pvld  = hit_elig_any_vld;' )
-    V.muxa( 'xx2l0c_tags_fill_dat_tag_i', C.l0c_slot_id_w, 'fill_id_chosen', tag_is )
-    V.muxa( 'xx2l0c_tags_hit_dat_tag_i',  C.l0c_slot_id_w, 'hit_id_chosen',  tag_is )
+    V.muxa( 'fill_dat_tag_i', C.l0c_slot_id_w, 'fill_id_chosen', tag_is )
+    V.muxa( 'hit_dat_tag_i',  C.l0c_slot_id_w, 'hit_id_chosen',  tag_is )
+    P( f'assign xx2l0c_tags_fill_dat_tag_i = fill_dat_tag_i;' )
+    P( f'assign xx2l0c_tags_hit_dat_tag_i  = hit_dat_tag_i;' )
     V.always_at_posedge();
     P( f'    if ( !{V.reset_} ) begin' )
     P( f'        fill_elig <= 0;' )
