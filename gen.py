@@ -10,11 +10,11 @@ import C                        # config file
 import l0c                      # L0 cache
 import l0c_tags                 # L0 cache tags only
 
-if len( sys.argv ) != 4: S.die( 'usage: gen.py module_name op for_test' )
+if len( sys.argv ) != 2: S.die( 'usage: gen.py module_name' )
 
 module_name = sys.argv[1]
-m           = sys.argv[2]
-for_test    = int(sys.argv[3])
+m           = S.subst( module_name, r'^tb_', '' )
+for_test    = module_name != m
 
 C.reinit()
 
@@ -28,7 +28,7 @@ builder.reinit()
 
 if for_test:
     make_fn = getattr( builder, f'make_tb_{m_lc}' )
-    make_fn( m_lc, module_name )
+    make_fn( m_lc, m_lc )
 else:
     make_fn = getattr( builder, f'make_{m_lc}' )
     make_fn( module_name )

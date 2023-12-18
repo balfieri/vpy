@@ -54,10 +54,9 @@ test: $(TEST_OUTS)
 dtest: $(TEST_DOUTS)
 
 tb_%.v: $(DEPS) %.v
-	$(PYTHON3) gen.py $(patsubst tb_%.v, %, $@) $(patsubst tb_%.v,%, $@) 1 &> $@
 
 %.v: $(DEPS)
-	$(PYTHON3) gen.py $(patsubst %.v,%, $@) $(patsubst %.v,%, $@) 0 &> $@
+	$(PYTHON3) gen.py $(patsubst %.v,%, $@) &> $@
 
 %.out: %.v
 	$(PYTHON3) vsim.py $(patsubst %.out, %, $@) &> $@
