@@ -35,6 +35,7 @@ endif
 # example designs
 #
 MODULES=\
+        arb_rr \
 	l0c \
 	l0c_tags \
 

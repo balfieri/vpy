@@ -8,6 +8,7 @@ import V
 P = print
 
 def reinit():
+    global arb_req_id_cnt, arb_req_id_w, xx2arb, arb2xx
     global addr_w, mem_addr_w, mem_dat_w
     global l0c_slot_cnt, l0c_slot_id_w, l0c_line_w, l0c_req_id_w, l0c_req_id_cnt
     global l0c_addr_w, l0c_dat_w, l0c_ref_cnt_max, l0c_subword_w, l0c_subword_cnt, l0c_mem_tag_id_w
@@ -19,13 +20,22 @@ def reinit():
     #
     V.reinit( 'lclk', 'lreset_', _ramgen_cmd='./bramgen' )
 
-    addr_w            = 32              # bits per virtual byte address
-    mem_dat_w         = 64              # 8B for now
-    mem_addr_w        = addr_w - V.log2( mem_dat_w >> 3 )
+    #-------------------------------------------------------
+    # Arbiter
+    #-------------------------------------------------------
+    arb_req_id_cnt            = 4
+    arb_req_id_w              = V.log2( arb_req_id_cnt )
+
+    xx2arb                    = { 'elig':               arb_req_id_cnt }
+    arb2xx                    = { 'req_id':             arb_req_id_w }
 
     #-------------------------------------------------------
     # L0
     #-------------------------------------------------------
+    addr_w                    = 32              # bits per virtual byte address
+    mem_dat_w                 = 64              # 8B for now
+    mem_addr_w                = addr_w - V.log2( mem_dat_w >> 3 )
+
     l0c_slot_cnt              = 2
     l0c_slot_id_w             = V.log2( l0c_slot_cnt )
     l0c_line_w                = 32
