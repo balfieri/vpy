@@ -181,9 +181,10 @@ def make_tb_l0c_tags( name, module_name ):
     P( f'        end' )
     P( f'    end' )
     P( f'end' )
-    V.dassert( 'l0c_idle === 1 || (|req_in_use_mask) === 1', 'should be non-idle only if requests outstanding' )
     V.rega( 'xx2l0c_d_pvld', 1, 'xx2l0c_pvld' )
-    V.dassert( 'l0c_idle === 0 || xx2l0c_d_pvld == 0', 'should be non-idle when interfaces are busy' )
+    V.rega( 'xx2l0c_tags_fill_dat_d_pvld', 1, 'xx2l0c_tags_fill_dat_pvld' )
+    V.dassert( 'l0c_idle === 1 || (|req_in_use_mask) === 1 || xx2l0c_tags_fill_dat_d_pvld === 1', 'should be non-idle only if requests outstanding or fill just sent' )
+    V.dassert( 'l0c_idle === 0 || xx2l0c_d_pvld === 0', 'should be non-idle when interfaces are busy' )
     V.dassert( '(req_status_mask & req_in_use_mask) === req_status_mask', 'status for req not outstanding' )
     V.dassert( '(req_status_mask & req_got_status_mask) === 0', 'status received twice' )
 
