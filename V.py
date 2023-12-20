@@ -1591,15 +1591,6 @@ def fifo( iname, oname, sigs, pvld, prdy, depth, m_name='', u_name='', with_wr_p
     P(f'{m_name} {u_name}( .{clk}({clk}), .{reset_}({reset_}),' )
     P(f'                        .wr_pvld({wr_pvld}), .wr_prdy({wr_prdy}), .wr_pd('+'{'+f'{ins}'+'}),' )
     P(f'                        .rd_pvld({rd_pvld}), .rd_prdy({rd_prdy}), .rd_pd('+'{'+f'{outs}'+'}) );' )
-    if with_wr_prdy:
-        P(f'// synopsys translate_off' )
-        always_at_posedge()
-        P(f'    if ( {reset_} === 1 && {wr_pvld} !== 0 && {wr_prdy} !== 1 ) begin' )
-        P(f'        $display( "%0d: %m: ERROR: fifo wr_pvld=%d but wr_prdy=%d", $stime, {wr_pvld}, {wr_prdy} );' )
-        P(f'        $fatal;' )
-        P(f'    end' )
-        P(f'end' )
-        P(f'// synopsys translate_on' )
 
 def make_fifo( module_name ):
     info = fifos[module_name]

@@ -26,7 +26,12 @@ which uses the vsim.py script, type:
 make dtest
 </pre>
 
-The examples all use a configuration file, C.py, that parameterizes the example designs. This is my convention. 
+I use a Makefile and gen.py outer script to generate either the DUT or the testbench. 
+This is my convention, not required.
+
+The examples all use a configuration file, C.py, that parameterizes the example designs. 
+Again, this is my convention, not required.
+
 So each design will typically do this at the beginning:
 
 <pre>
