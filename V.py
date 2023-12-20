@@ -1553,7 +1553,7 @@ def make_ram( module_name ):
         P(f'//' )
         S.cmd( f'{ramgen_cmd} {module_name}', echo=False, echo_stdout=False )
 
-def fifo( iname, oname, sigs, pvld, prdy, depth, m_name='', u_name='', with_wr_prdy=True ):
+def fifo( iname, oname, sigs, pvld, prdy, depth, m_name='', u_name='', with_wr_prdy=True, do_decl=True ):
     if depth > 1: depth += 1
     w = 0
     for sig in sigs: w += sigs[sig]
@@ -1576,13 +1576,13 @@ def fifo( iname, oname, sigs, pvld, prdy, depth, m_name='', u_name='', with_wr_p
     rd_pvld = f'{oname}{pvld}'
     rd_prdy = f'{oname}{prdy}'
     if with_wr_prdy: 
-        wire( wr_prdy, 1 )
+        if do_decl: wire( wr_prdy, 1 )
     else:
         wr_prdy = ''
-    wire( rd_pvld, 1 )
-    wire( rd_prdy, 1 )
+    if do_decl: wire( rd_pvld, 1 )
+    if do_decl: wire( rd_prdy, 1 )
     for sig in sigs:
-        wire( f'{oname}{sig}', sigs[sig] )
+        if do_decl: wire( f'{oname}{sig}', sigs[sig] )
         if ins  != '': ins  += ', '
         if outs != '': outs += ', '
         ins  += f'{iname}{sig}'
