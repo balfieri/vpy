@@ -9,6 +9,7 @@ The following examples are provided. Each has an associated testbench around it.
 in foo.py, the generated files will be foo.v (design) and tb_foo.v (testbench):
 
 * arb_rr.py   - round-robin arbiter (combinational)
+* fifo1.py    - stallable fifo with ram in flops
 * l0c.py      - L0 read-only non-blocking cache with tags and data in flops 
 * l0c_tags.py - L0 read-only non-blocking cache with tags in flops (TB fakes fill part)
 

@@ -9,6 +9,7 @@ P = print
 
 def reinit():
     global arb_req_id_cnt, arb_req_id_w, xx2arb, arb2xx
+    global fifo_d, fifo_w, xx2fifo, fifo2xx
     global addr_w, mem_addr_w, mem_dat_w
     global l0c_slot_cnt, l0c_slot_id_w, l0c_line_w, l0c_req_id_w, l0c_req_id_cnt
     global l0c_addr_w, l0c_dat_w, l0c_ref_cnt_max, l0c_subword_w, l0c_subword_cnt, l0c_mem_tag_id_w
@@ -28,6 +29,15 @@ def reinit():
 
     xx2arb                    = { 'elig':               arb_req_id_cnt }
     arb2xx                    = { 'req_id':             arb_req_id_w }
+
+    #-------------------------------------------------------
+    # FIFO
+    #-------------------------------------------------------
+    fifo_d                    = 7
+    fifo_w                    = 8
+
+    xx2fifo                   = { 'dat':                fifo_w }              
+    fifo2xx                   = xx2fifo.copy()
 
     #-------------------------------------------------------
     # L0

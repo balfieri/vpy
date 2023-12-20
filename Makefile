@@ -36,6 +36,7 @@ endif
 #
 MODULES=\
         arb_rr \
+        fifo1 \
 	l0c \
 	l0c_tags \
 

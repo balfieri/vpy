@@ -33,6 +33,7 @@ def reinit( _clk='clk', _reset_='reset_', _vdebug=True, _vassert=True, _ramgen_c
     global in_module_header
     global vlint_off_width, vlint_on_width
     global vlint_off_unused, vlint_on_unused
+    global vlint_off_filename, vlint_on_filename
     clk = _clk
     reset_ = _reset_
     vdebug = _vdebug
@@ -49,10 +50,12 @@ def reinit( _clk='clk', _reset_='reset_', _vdebug=True, _vassert=True, _ramgen_c
     rand_seed_w_init_addend = 0
     seed_i = 0
     custom_cla = False
-    vlint_off_width  = 'verilator lint_off WIDTH' 
-    vlint_on_width   = 'verilator lint_on WIDTH' 
-    vlint_off_unused = 'verilator lint_off UNUSEDSIGNAL' 
-    vlint_on_unused  = 'verilator lint_on UNUSEDSIGNAL' 
+    vlint_off_width    = 'verilator lint_off WIDTH' 
+    vlint_on_width     = 'verilator lint_on WIDTH' 
+    vlint_off_unused   = 'verilator lint_off UNUSEDSIGNAL' 
+    vlint_on_unused    = 'verilator lint_on UNUSEDSIGNAL' 
+    vlint_off_filename = 'verilator lint_off DECLFILENAME' 
+    vlint_on_filename  = 'verilator lint_on DECLFILENAME' 
 
 #-------------------------------------------
 # Returns number of bits to hold 0 .. n-1
@@ -137,7 +140,7 @@ def srega( name, w, v ):
     sreg( name, w )    
     always_at_posedge( f'{name} <= {v};' )
 
-def module_header_end():
+def module_header_end( no_warn_filename=False ):
     global in_module_header
     global io
     if not in_module_header: S.die( 'module_header_end() called while not already in a module header' )
@@ -151,6 +154,7 @@ def module_header_end():
     if ports_s != '': ports_s = f'( {ports_s} )'
 
     P()
+    if no_warn_filename: P( f'// {vlint_off_filename}' )
     if ports_s == '': 
         P(f'`ifndef VERILATOR' )
     P(f'module {module_name}{ports_s};' )
@@ -159,6 +163,7 @@ def module_header_end():
         P(f'module {module_name}( {clk} );' )
         P(f'input {clk};' )
         P(f'`endif' )
+    if no_warn_filename: P( f'// {vlint_on_filename}' )
     P()
     for i in range( len(io) ):
         if io[i]['name'] != '':
@@ -1612,7 +1617,7 @@ def make_fifo( module_name ):
     input(  'rd_prdy',   1 )
     output( 'rd_pd',     info['w'] )
     
-    module_header_end()
+    module_header_end( no_warn_filename=True )
 
     depth = info['depth']
     if depth == 0:
@@ -1645,7 +1650,9 @@ def make_fifo( module_name ):
         P(f'    if ( !{reset_} ) begin' )
         P(f'        cnt <= 0;' )
         P(f'    end else if ( wr_pushing != rd_popping ) begin' )
+        P(f'        // {vlint_off_width}' )
         P(f'        cnt <= cnt + wr_pushing - rd_popping;' )
+        P(f'        // {vlint_on_width}' )
         P(f'    end' )
         P(f'end' )
         P()
