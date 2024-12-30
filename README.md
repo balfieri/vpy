@@ -223,6 +223,15 @@ def tb_ram_write( ram_name, row, iname, sigs, do_decl=True )
 ```
 
 <p>
+Things to do:
+* Test logN-based logic
+* Test integer and fixed-point math
+* Beef up fifos
+* Beef up caches
+* Add crossbar generator
+* Add floating-point math
+
+<p>
 Bob Alfieri<br>
 Chapel Hill, NC
 </p>
