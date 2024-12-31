@@ -223,12 +223,15 @@ def tb_ram_write( ram_name, row, iname, sigs, do_decl=True )
 ```
 
 Things to do:
+* Refactor so we pass a parameters dictionary into each generator so we can make generators more general
+** fifo - not sure we need to do it here
+** cache - definitely here
 * Test logN-based logic
 * Test integer and fixed-point math
 * Beef up fifos
 * Beef up caches
 * Add crossbar generator
-* Add floating-point math
+* Add floating-point math generator
 
 Bob Alfieri<br>
 Chapel Hill, NC
