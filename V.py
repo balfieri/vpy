@@ -86,6 +86,9 @@ def is_pow2( n ):
 def value_bitwidth( n ):
     return max( 1, log2( n + 1 ) )
 
+#-------------------------------------------
+# MODULE HEADER
+#-------------------------------------------
 def module_header_begin( mn ):
     global module_name
     module_name = mn
@@ -174,6 +177,9 @@ def module_header_end( no_warn_filename=False ):
     in_module_header = False
     io = []
 
+#-------------------------------------------
+# ENUMERATION TYPES
+#-------------------------------------------
 def enum( prefix, names ):
     cnt = len(names)
     if cnt == 0: S.die( f'no enums' )
@@ -195,6 +201,9 @@ def enums_parse( file_name, prefix ):
     if len( enums ) == 0: die( f'enums_parse: {file_name} contains no enums with the prefix "{prefix}"' )
     return enums
 
+#-------------------------------------------
+# DEBUG
+#-------------------------------------------
 def display( msg, sigs, use_hex_w=16, prefix='        ', show_module=False ):
     fmt = ''
     vals = ''
@@ -326,6 +335,9 @@ def unconcata( combined, cnt, w, r='', reverse=True ):
         if r != '': wirea( f'{r}{i}', w, v )
     return vals
 
+#-------------------------------------------
+# INTERFACES
+#-------------------------------------------
 def iface_width( sigs ):
     w = 0
     for sig in sigs:
@@ -516,7 +528,7 @@ def iface_dprint( name, sigs, pvld, prdy='', use_hex_w=16, with_clk=True, indent
     dprint( name, isigs, vld, use_hex_w=16, with_clk=with_clk, indent=indent )
 
 #---------------------------------------------------------
-# wrapped add and sub (combinational)
+# Wrapped add and sub (combinational)
 #
 # (A + B) % C
 # (A - B) % C
@@ -541,7 +553,7 @@ def wrapped_sub( r, w, a, b, c ):
     return r
 
 #---------------------------------------------------------
-# adder and subtractor are register values that can wrap
+# Adder and subtractor are register values that can wrap
 #---------------------------------------------------------
 def adder( r, c, do_incr, init=0, incr=1, _clk='', _reset_='' ):
     if _clk == '': _clk = clk
@@ -572,7 +584,7 @@ def subtractor( r, c, do_decr, init=0, decr=1, _clk='', _reset_='' ):
     P(f'end' )
 
 #---------------------------------------------------------
-# carry lookahead adder 
+# Carry Lookahead Adder (CLA)
 #---------------------------------------------------------
 def cla( r, w, a, b, cin ):
     if not custom_cla: 
@@ -667,7 +679,7 @@ def cla( r, w, a, b, cin ):
     return f'{r}_S'
 
 #-------------------------------------------
-# compute min/max() in hardware
+# Compute min/max() in hardware
 #-------------------------------------------
 def vmin( a, b, r_w, r='' ):
     if r == '': r = f'{a}_min_{b}' 
@@ -680,7 +692,7 @@ def vmax( a, b, r_w, r='' ):
     return r
 
 #-------------------------------------------
-# compute integer log2( x ) in hardware
+# Compute integer log2( x ) in hardware
 #-------------------------------------------
 def vlog2( x, x_w, r='' ):
     if r == '': r = f'{x}_lg2'
@@ -690,8 +702,8 @@ def vlog2( x, x_w, r='' ):
     return r
     
 #-------------------------------------------
-# hash a bunch of bits x (width: x_w) down to r_w bits;
-# currently this is done by XOR'ing groups of r_w bits with one another,
+# Hash a bunch of bits x (width: x_w) down to r_w bits.
+# Currently this is done by XOR'ing groups of r_w bits with one another,
 # but other hash function options could be created in the future
 #-------------------------------------------
 def hash( x, x_w, r_w, r='' ):
@@ -711,7 +723,11 @@ def hash( x, x_w, r_w, r='' ):
     return r
 
 #-------------------------------------------
-# fixed-point resize
+# FIXED-POINT MATH
+#-------------------------------------------
+
+#-------------------------------------------
+# Fixed-point resize
 #-------------------------------------------
 def fp_resize( fp1, r, is_signed, int1_w, frac1_w, intr_w, fracr_w ):
     lsb1 = 0 if fracr_w >= frac1_w else frac1_w-fracr_w
@@ -732,7 +748,7 @@ def fp_resize( fp1, r, is_signed, int1_w, frac1_w, intr_w, fracr_w ):
     wirea( r, int(is_signed)+intr_w+fracr_w, expr )
 
 #-------------------------------------------
-# fixed-point left-shift using array of possible discrete lshs with optional resizing
+# Fixed-point left-shift using array of possible discrete lshs with optional resizing
 #-------------------------------------------
 def fp_lsha( fp1, sel, lshs, r, is_signed, int1_w, frac1_w, intr_w, fracr_w ):
     vals = []
@@ -748,14 +764,14 @@ def fp_lsha( fp1, sel, lshs, r, is_signed, int1_w, frac1_w, intr_w, fracr_w ):
     muxa( r, wr, sel, vals )
 
 #-------------------------------------------
-# fixed-point left-shift with optional resizing
+# Fixed-point left-shift with optional resizing
 #-------------------------------------------
 def fp_lsh( fp1, lsh, lsh_max, r, is_signed, int1_w, frac1_w, intr_w, fracr_w ):
     lshs = [i for i in range(lsh_max+1)]  # all possible left-shifts from 0 to lsh_max
     fp_lsha( fp1, lsh, lshs, r, is_signed, int1_w, frac1_w, intr_w, fracr_w )
 
 #-------------------------------------------
-# fixed-point multiply with optional resizing and/or left-shift
+# Fixed-point multiply with optional resizing and/or left-shift
 #-------------------------------------------
 def fp_mul( fp1, fp2, r, is_signed, int1_w, frac1_w, int2_w=-1, frac2_w=-1, intr_w=-1, fracr_w=-1, extra_lsh='', extra_lsh_max=0 ):
     if int2_w == -1: int2_w = int1_w
@@ -871,7 +887,7 @@ def muxN( sigs, sel, vals, add_reg=True ):
             P(f'end' )
 
 #-------------------------------------------
-# rotate bits left or right by N*w (useful for round-robin scheduling)
+# Rotate bits left or right by N*w (useful for round-robin scheduling)
 #-------------------------------------------
 def rotate_left( r, cnt, n, bits, w=1 ):
     tw = cnt*w
@@ -888,7 +904,7 @@ def rotate_right( r, cnt, n, bits, w=1 ):
     return muxa( r, tw, n, vals )
 
 #-------------------------------------------
-# construct static bit masks
+# Construct static bit masks
 #-------------------------------------------
 def hex_const( v, w ):
     hw = (w+3) >> 2
@@ -923,7 +939,7 @@ def bits_ge( b, w ):
     return hex_const( r, w )
 
 #-------------------------------------------
-# count zeroes/ones
+# Count zeroes/ones
 #-------------------------------------------
 def count_zeroes( x, x_w, r='' ):
     sum = ""
@@ -943,7 +959,7 @@ def count_ones( x, x_w, r='' ):
     return f'({sum})'
 
 #-------------------------------------------
-# count leading zeroes/ones using priority encoder
+# Count leading zeroes/ones using priority encoder
 #-------------------------------------------
 def count_leading_zeroes( x, x_w, add_reg=True, suff='_ldz' ):
     cnt_w = value_bitwidth( x_w )
@@ -984,7 +1000,7 @@ def count_leading_ones( x, x_w, add_reg=True, suff='_ldo' ):
     return f'{x}{suff}' 
 
 #-------------------------------------------
-# count trailing zeroes/ones using reverse() and previous 
+# Count trailing zeroes/ones using reverse() and previous 
 #-------------------------------------------
 def count_trailing_zeroes( x, x_w, add_reg=True, suff='_trz' ):
     reverse( x, x_w, f'{x}_rev' )
@@ -1009,7 +1025,7 @@ def count_trailing_ones( x, x_w, add_reg=True, suff='_ldo' ):
     return f'{x}{suff}' 
 
 #-------------------------------------------
-# find first one after/before position i
+# Find first one after/before position i
 # after:  ROR by i+1, then use count_trailing_zeroes()
 # before: ROR by i+0, then use count_leading_zeroes()
 # currently x_w must be a power of 2
@@ -1032,8 +1048,8 @@ def first_one_before_i( x, x_w, i, r ):
     return r
 
 #-------------------------------------------
-# determine if a one_hot mask is really a one-hot mask
-# there should be at most one bit set
+# Determine if a one_hot mask is really a one-hot mask....
+# There should be at most one bit set
 #-------------------------------------------
 def is_one_hot( mask, mask_w, r='' ):
     ioh = count_ones( mask, mask_w ) + ' <= 1'
@@ -1041,9 +1057,9 @@ def is_one_hot( mask, mask_w, r='' ):
     return ioh
 
 #-------------------------------------------
-# get a one-hot mask from a binary value     
-# by default, it returns an expression but can also declare a wire
-# if pvld is supplied, it will not set the bit unless pvld is 1
+# Get a one-hot mask from a binary value.
+# By default, it returns an expression but can also declare a wire.
+# If pvld is supplied, it will not set the bit unless pvld is 1
 #-------------------------------------------
 def binary_to_one_hot( b, mask_w, r='', pvld='' ):
     mask = f'{mask_w}\'d1 << {b}'
@@ -1052,9 +1068,9 @@ def binary_to_one_hot( b, mask_w, r='', pvld='' ):
     return r
 
 #-------------------------------------------
-# get index of 1 bit in one-hot mask
-# optionally sets "any_vld" flag if any bit is set
-# assumes: at most one bit is set, so can use an OR tree
+# Get index of 1 bit in one-hot mask.
+# Optionally sets "any_vld" flag if any bit is set.
+# Assumes: at most one bit is set, so can use an OR tree
 #-------------------------------------------
 def one_hot_to_binary( mask, mask_w, r, r_any_vld='' ):
     if mask_w == 1:
@@ -1189,7 +1205,7 @@ def uncollapse( mask, indexes, index_cnt, vals, r ):
     return results
 
 #-------------------------------------------
-# choose eligible from mask and preferred 
+# Choose eligible from mask and preferred 
 #
 # note: elig_mask should be right-to-left order
 #-------------------------------------------
@@ -1229,7 +1245,7 @@ def choose_eligible( r, elig_mask, cnt, preferred, gen_preferred=False, adv_pref
     return r
 
 #-------------------------------------------
-# choose eligible from mask with highest priority
+# Choose eligible from mask with highest priority
 # using a binary search
 #-------------------------------------------
 def choose_eligible_with_highest_prio( r, vlds, prios, prio_w ):
@@ -1274,7 +1290,7 @@ def choose_eligible_with_highest_prio( r, vlds, prios, prio_w ):
     wirea(f'{r}_i', choice_w, choices[0] )
 
 #-------------------------------------------
-# choose multiple eligibles from elig_mask and 
+# Choose multiple eligibles from elig_mask and 
 # assign them to requestors from req_mask.
 #
 # results:
@@ -1323,7 +1339,7 @@ def choose_eligibles( r, elig_mask, elig_cnt, preferred, req_mask, req_cnt, gen_
         P(f'end' )
 
 #-------------------------------------------
-# resource accounting for <cnt> resource slots
+# Resource accounting for <cnt> resource slots
 #-------------------------------------------
 def resource_accounting( name, cnt, add_free_cnt=False, set_i_is_free_i=False ):
     P()
@@ -1448,7 +1464,11 @@ def rom_2d( i0, i1, names, entries, nesting=0, result_w=None ):
         P(f'end' )
 
 #--------------------------------------------------------------------
-# By default, this generates a 2-port synchronous ram (1 clock).
+# RAM
+#
+# Instantiates a ram that will get generated later during module_footer().
+#
+# By default, this causes a 2-port synchronous ram (1 clock) to get generated.
 #
 # wr_cnt, rd_cnt, and rw_cnt can be changed to control the number of read ports, write ports,
 # and bi-directional ports. A ram may not have any write or read ports if it has any bi-directional ports.
@@ -1543,16 +1563,9 @@ def ram( iname, oname, sigs, depth, wr_cnt=1, rd_cnt=1, rw_cnt=0, clks=[], m_nam
     
     P(f'{m_name} {u_name}( {inst_sigs}' )
 
-def make_ram( module_name ):
-    info = rams[module_name]
-    if ramgen_cmd == '':
-        S.die( f'make_ram(): currently cannot generate rams without reinit( ramgen_cmd=... ) being set - restriction will be lifted soon' )
-    else:
-        P()
-        P(f'// {module_name} generated externally using: {ramgen_cmd} {module_name}' )
-        P(f'//' )
-        S.cmd( f'{ramgen_cmd} {module_name}', echo=False, echo_stdout=False )
-
+#--------------------------------------------------------------------
+# Instantiates a fifo which will be generated later by module_footer()
+#--------------------------------------------------------------------
 def fifo( iname, oname, sigs, pvld, prdy, depth, m_name='', u_name='', with_wr_prdy=True, do_decl=True ):
     if depth > 1: depth += 1
     w = 0
@@ -1592,107 +1605,9 @@ def fifo( iname, oname, sigs, pvld, prdy, depth, m_name='', u_name='', with_wr_p
     P(f'                        .wr_pvld({wr_pvld}), .wr_prdy({wr_prdy}), .wr_pd('+'{'+f'{ins}'+'}),' )
     P(f'                        .rd_pvld({rd_pvld}), .rd_prdy({rd_prdy}), .rd_pd('+'{'+f'{outs}'+'}) );' )
 
-def make_fifo( module_name ):
-    info = fifos[module_name]
-    
-    module_header_begin( module_name )
-
-    input(  clk,       1 )
-    input(  reset_,    1 )
-   
-    input(  'wr_pvld',   1 )
-    output( 'wr_prdy',   1 )
-    input(  'wr_pd',     info['w'] )
-    
-    output( 'rd_pvld',   1 )
-    input(  'rd_prdy',   1 )
-    output( 'rd_pd',     info['w'] )
-    
-    module_header_end( no_warn_filename=True )
-
-    depth = info['depth']
-    if depth == 0:
-        P(f'assign {wr_prdy,rd_pvld,rd_pd} = {rd_prdy,wr_pvld,wr_pd};' )
-    elif depth == 1:
-        P()
-        P(f'// simple flop' )
-        P(f'//' )
-        reg( 'rd_pvld', 1 )
-        reg( 'rd_pd', info['w'] )
-        always_at_posedge()
-        P(f'    rd_pvld <= wr_pvld;' )
-        P(f'    if ( wr_pvld ) rd_pd <= wr_pd;' )
-        P(f'end' )
-    else:
-        w     = info['w']
-        a_w   = log2( depth )
-        cnt_w = a_w
-        cnt_w = (a_w+1) if (1 << a_w) >= depth else a_w
-        P(f'// flop ram' )
-        P(f'//' )
-        for i in range( depth ): reg( f'ram_ff{i}', w )
-        P()
-        P(f'// PUSH/POP' )
-        P(f'//' ) 
-        reg( 'cnt', cnt_w )
-        P(f'wire wr_pushing = wr_pvld && wr_prdy;' )
-        P(f'wire rd_popping = rd_pvld && rd_prdy;' )
-        always_at_posedge()
-        P(f'    if ( !{reset_} ) begin' )
-        P(f'        cnt <= 0;' )
-        P(f'    end else if ( wr_pushing != rd_popping ) begin' )
-        P(f'        // {vlint_off_width}' )
-        P(f'        cnt <= cnt + wr_pushing - rd_popping;' )
-        P(f'        // {vlint_on_width}' )
-        P(f'    end' )
-        P(f'end' )
-        P()
-        P(f'// WRITE SIDE' )
-        P(f'//' ) 
-        reg( 'wr_adr', a_w )
-        P(f'assign wr_prdy = cnt != {depth} || rd_popping;' )
-        always_at_posedge()
-        P(f'    if ( !{reset_} ) begin' )
-        P(f'        wr_adr <= 0;' )
-        P(f'    end else if ( wr_pushing ) begin' )
-        P(f'        case( wr_adr )' )
-        for i in range( depth ): P(f'            {a_w}\'d{i}: ram_ff{i} <= wr_pd;' )
-        P(f'        endcase' )
-        P()
-        P(f'        wr_adr <= (wr_adr == {depth-1}) ? 0 : (wr_adr+1);' )
-        P(f'    end' )
-        P(f'end' )
-        P()
-        P(f'// READ SIDE' )
-        P(f'//' )
-        reg( 'rd_adr', a_w )
-        always_at_posedge()
-        P(f'    if ( !{reset_} ) begin' )
-        P(f'        rd_adr <= 0;' )
-        P(f'    end else if ( rd_popping ) begin' )
-        P(f'        rd_adr <= (rd_adr == {depth-1}) ? 0 : (rd_adr+1);' )
-        P(f'    end' )
-        P(f'end' )
-        P()
-        P(f'assign rd_pvld = cnt != 0;' )
-        P(f'reg [{w-1}:0] rd_pd_p;' )
-        P(f'assign rd_pd = rd_pd_p;' )
-        P(f'always @( * ) begin' )
-        P(f'    case( rd_adr )' )
-        for i in range( depth ): P(f'        {a_w}\'d{i}: rd_pd_p = ram_ff{i};' )
-        P(f'        // VCS coverage off' )
-        P(f'        default: begin' )
-        P(f'            rd_pd_p = {w}\'d0;' )
-        P(f'            // synopsys translate_off' )
-        P(  '            rd_pd_p = {'+f'{w}'+'{1\'bx}};' )
-        P(f'            // synopsys translate_on' )
-        P(f'            end' )
-        P(f'        // VCS coverage on' )
-        P(f'    endcase' )
-        P(f'end' )
-    P()
-    P(f'endmodule // {module_name}' )
-
+#--------------------------------------------------------------------
+# Generate cache tags handling.
+#--------------------------------------------------------------------
 def cache_tags( name, addr_w, tag_cnt, req_cnt, ref_cnt_max, incr_ref_cnt_max=1, decr_req_cnt=0, can_always_alloc=False, custom_avails=False ):
     if incr_ref_cnt_max < 1: S.die( f'cache_tags: incr_ref_cnt_max needs to be at least 1' )
     if decr_req_cnt == 0: decr_req_cnt = req_cnt
@@ -1854,18 +1769,140 @@ def cache_tags( name, addr_w, tag_cnt, req_cnt, ref_cnt_max, incr_ref_cnt_max=1,
     for r in range(req_cnt): idle += f' && !{name}_req{r}_pvld' 
     wirea( f'{name}_idle', 1, idle )
 
+#--------------------------------------------------------------------
+# Check that filling a cache tag that expects it.
+#--------------------------------------------------------------------
 def cache_filled_check( name, tag_i, r, tag_cnt, add_reg=True ):
     mux_subword( r, 1, tag_i, f'{name}__filleds', tag_cnt, add_reg=add_reg )
     
+#--------------------------------------------------------------------
+# MODULE FOOTER
+#--------------------------------------------------------------------
 def module_footer( mn ):
     P()
     P(f'endmodule // {mn}' )
     global rams, fifos
-    for ram  in rams:  make_ram( ram )
-    for fifo in fifos: make_fifo( fifo )
+    for ram  in rams:  _make_ram( ram )
+    for fifo in fifos: _make_fifo( fifo )
     fifos = {}
     rams = {}
 
+def _make_ram( module_name ):
+    info = rams[module_name]
+    if ramgen_cmd == '':
+        S.die( f'make_ram(): currently cannot generate rams without reinit( ramgen_cmd=... ) being set - restriction will be lifted soon' )
+    else:
+        P()
+        P(f'// {module_name} generated externally using: {ramgen_cmd} {module_name}' )
+        P(f'//' )
+        S.cmd( f'{ramgen_cmd} {module_name}', echo=False, echo_stdout=False )
+
+def _make_fifo( module_name ): 
+    info = fifos[module_name]
+    
+    module_header_begin( module_name )
+
+    input(  clk,       1 )
+    input(  reset_,    1 )
+   
+    input(  'wr_pvld',   1 )
+    output( 'wr_prdy',   1 )
+    input(  'wr_pd',     info['w'] )
+    
+    output( 'rd_pvld',   1 )
+    input(  'rd_prdy',   1 )
+    output( 'rd_pd',     info['w'] )
+    
+    module_header_end( no_warn_filename=True )
+
+    depth = info['depth']
+    if depth == 0:
+        P(f'assign {wr_prdy,rd_pvld,rd_pd} = {rd_prdy,wr_pvld,wr_pd};' )
+    elif depth == 1:
+        P()
+        P(f'// simple flop' )
+        P(f'//' )
+        reg( 'rd_pvld', 1 )
+        reg( 'rd_pd', info['w'] )
+        always_at_posedge()
+        P(f'    rd_pvld <= wr_pvld;' )
+        P(f'    if ( wr_pvld ) rd_pd <= wr_pd;' )
+        P(f'end' )
+    else:
+        w     = info['w']
+        a_w   = log2( depth )
+        cnt_w = a_w
+        cnt_w = (a_w+1) if (1 << a_w) >= depth else a_w
+        P(f'// flop ram' )
+        P(f'//' )
+        for i in range( depth ): reg( f'ram_ff{i}', w )
+        P()
+        P(f'// PUSH/POP' )
+        P(f'//' ) 
+        reg( 'cnt', cnt_w )
+        P(f'wire wr_pushing = wr_pvld && wr_prdy;' )
+        P(f'wire rd_popping = rd_pvld && rd_prdy;' )
+        always_at_posedge()
+        P(f'    if ( !{reset_} ) begin' )
+        P(f'        cnt <= 0;' )
+        P(f'    end else if ( wr_pushing != rd_popping ) begin' )
+        P(f'        // {vlint_off_width}' )
+        P(f'        cnt <= cnt + wr_pushing - rd_popping;' )
+        P(f'        // {vlint_on_width}' )
+        P(f'    end' )
+        P(f'end' )
+        P()
+        P(f'// WRITE SIDE' )
+        P(f'//' ) 
+        reg( 'wr_adr', a_w )
+        P(f'assign wr_prdy = cnt != {depth} || rd_popping;' )
+        always_at_posedge()
+        P(f'    if ( !{reset_} ) begin' )
+        P(f'        wr_adr <= 0;' )
+        P(f'    end else if ( wr_pushing ) begin' )
+        P(f'        case( wr_adr )' )
+        for i in range( depth ): P(f'            {a_w}\'d{i}: ram_ff{i} <= wr_pd;' )
+        P(f'        endcase' )
+        P()
+        P(f'        wr_adr <= (wr_adr == {depth-1}) ? 0 : (wr_adr+1);' )
+        P(f'    end' )
+        P(f'end' )
+        P()
+        P(f'// READ SIDE' )
+        P(f'//' )
+        reg( 'rd_adr', a_w )
+        always_at_posedge()
+        P(f'    if ( !{reset_} ) begin' )
+        P(f'        rd_adr <= 0;' )
+        P(f'    end else if ( rd_popping ) begin' )
+        P(f'        rd_adr <= (rd_adr == {depth-1}) ? 0 : (rd_adr+1);' )
+        P(f'    end' )
+        P(f'end' )
+        P()
+        P(f'assign rd_pvld = cnt != 0;' )
+        P(f'reg [{w-1}:0] rd_pd_p;' )
+        P(f'assign rd_pd = rd_pd_p;' )
+        P(f'always @( * ) begin' )
+        P(f'    case( rd_adr )' )
+        for i in range( depth ): P(f'        {a_w}\'d{i}: rd_pd_p = ram_ff{i};' )
+        P(f'        // VCS coverage off' )
+        P(f'        default: begin' )
+        P(f'            rd_pd_p = {w}\'d0;' )
+        P(f'            // synopsys translate_off' )
+        P(  '            rd_pd_p = {'+f'{w}'+'{1\'bx}};' )
+        P(f'            // synopsys translate_on' )
+        P(f'            end' )
+        P(f'        // VCS coverage on' )
+        P(f'    endcase' )
+        P(f'end' )
+    P()
+    P(f'endmodule // {module_name}' )
+
+#--------------------------------------------------------------------
+#--------------------------------------------------------------------
+# TESTBENCH COMPONENTS
+#--------------------------------------------------------------------
+#--------------------------------------------------------------------
 def tb_clk( decl_clk=True, default_cycles_max=2000, perf_op_first=100, perf_op_last=200 ):
     P()
     P(f'// {clk}' )
@@ -2121,9 +2158,6 @@ def tb_ram_read( ram_name, row, oname, sigs, do_decl=True ):
 def tb_ram_write( ram_name, row, iname, sigs, do_decl=True ):
     iface_combine( iname, f'{ram_name}[{row}]', sigs, do_decl )
 
-#-----------------------------------------------------------------
-# Partial testbench for logic in this file.
-#-----------------------------------------------------------------
 def make_v( module_name ):
     pass
 
