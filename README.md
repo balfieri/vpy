@@ -223,15 +223,20 @@ def tb_ram_write( ram_name, row, iname, sigs, do_decl=True )
 ```
 
 Things to do:
-* Refactor so we pass a parameters dictionary into each generator so we can make generators more general
-** fifo - not sure we need to do it here
-** cache - definitely here
+* Refactor so that low-level TB stuff is done in V.py for:
+  * fifo - fifo1 becomes trivial wrapper
+  * arb_rr - arb_rr1 becomes a trivial wrapper
+* Change l0c.py to a general cache generator, cache.py
+  * move cache_tags stuff to that generator
+  * move TB stuff to cache.py
+  * l0c.py becomes simple wrapper
+* Refactor so we pass a parameters dictionary into each generator
 * Test logN-based logic
 * Test integer and fixed-point math
 * Beef up fifos
-* Beef up caches
-* Add crossbar generator
-* Add floating-point math generator
+* Beef up cache.py generator
+* Add xbar.py generator
+* Add float.py generator
 
 Bob Alfieri<br>
 Chapel Hill, NC
