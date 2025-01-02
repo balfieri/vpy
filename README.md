@@ -224,7 +224,6 @@ def tb_ram_write( ram_name, row, iname, sigs, do_decl=True )
 
 Things to do:
 * Refactor so that low-level TB stuff is done in V.py for:
-  * fifo - fifo1 becomes trivial wrapper
   * arb_rr - arb_rr1 becomes a trivial wrapper
 * Change l0c.py to a general cache generator, cache.py
   * move cache_tags stuff to that generator
