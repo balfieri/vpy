@@ -89,7 +89,7 @@ def value_bitwidth( n ):
 #-------------------------------------------
 # MODULE HEADER
 #-------------------------------------------
-def module_header_begin( mn ):
+def module_header_begin( mn, with_file_header=True ):
     global module_name
     module_name = mn
     global rams, fifos
@@ -98,10 +98,11 @@ def module_header_begin( mn ):
     if in_module_header: S.die( 'module_header_begin() called while already in a module header' )
     rams = {}
     fifos = {}
-    P(f'// AUTOMATICALLY GENERATED - DO NOT EDIT OR CHECK IN' )
-    P()
-    P(f'`timescale 1ns/1ps' )
-    P()
+    if with_file_header:
+        P(f'// AUTOMATICALLY GENERATED - DO NOT EDIT OR CHECK IN' )
+        P()
+        P(f'`timescale 1ns/1ps' )
+        P()
     io = []
     in_module_header = True
 
@@ -1571,9 +1572,15 @@ def fifo( iname, oname, sigs, pvld, prdy, depth, m_name='', u_name='', with_wr_p
     w = 0
     for sig in sigs: w += sigs[sig]
 
-    m_name = f'{module_name}_fifo_{depth}x{w}'
+    if m_name == '': m_name = f'{module_name}_fifo_{depth}x{w}'
     if u_name == '': u_name = f'u_{m_name}'
-    fifos[m_name] = {'depth': depth, 'w': w}
+    wr = iname if iname != '' else 'wr'
+    rd = oname if oname != '' else 'rd'
+
+    fifos[m_name] = { 'depth':   depth, 
+                      'w':       w,
+                      'wr':      wr,
+                      'rd':      rd }
 
     P()
     names = ', '.join( sigs.keys() )
@@ -1584,16 +1591,16 @@ def fifo( iname, oname, sigs, pvld, prdy, depth, m_name='', u_name='', with_wr_p
     if oname != '': oname += '_' 
     ins = ''
     outs = ''
-    wr_pvld = f'{iname}{pvld}'
-    wr_prdy = f'{iname}{prdy}'
-    rd_pvld = f'{oname}{pvld}'
-    rd_prdy = f'{oname}{prdy}'
+    iname_pvld = f'{iname}{pvld}'
+    iname_prdy = f'{iname}{prdy}'
+    oname_pvld = f'{oname}{pvld}'
+    oname_prdy = f'{oname}{prdy}'
     if with_wr_prdy: 
-        if do_decl: wire( wr_prdy, 1 )
+        if do_decl: wire( iname_prdy, 1 )
     else:
-        wr_prdy = ''
-    if do_decl: wire( rd_pvld, 1 )
-    if do_decl: wire( rd_prdy, 1 )
+        iname_prdy = ''
+    if do_decl: wire( oname_pvld, 1 )
+    if do_decl: wire( oname_prdy, 1 )
     for sig in sigs:
         if do_decl: wire( f'{oname}{sig}', sigs[sig] )
         if ins  != '': ins  += ', '
@@ -1602,8 +1609,8 @@ def fifo( iname, oname, sigs, pvld, prdy, depth, m_name='', u_name='', with_wr_p
         outs += f'{oname}{sig}'
     
     P(f'{m_name} {u_name}( .{clk}({clk}), .{reset_}({reset_}),' )
-    P(f'                        .wr_pvld({wr_pvld}), .wr_prdy({wr_prdy}), .wr_pd('+'{'+f'{ins}'+'}),' )
-    P(f'                        .rd_pvld({rd_pvld}), .rd_prdy({rd_prdy}), .rd_pd('+'{'+f'{outs}'+'}) );' )
+    P(f'                        .{wr}_pvld({iname_pvld}), .{wr}_prdy({iname_prdy}), .{wr}_pd('+'{'+f'{ins}'+'}),' )
+    P(f'                        .{rd}_pvld({oname_pvld}), .{rd}_prdy({oname_prdy}), .{rd}_pd('+'{'+f'{outs}'+'}) );' )
 
 #--------------------------------------------------------------------
 # Generate cache tags handling.
@@ -1783,7 +1790,7 @@ def module_footer( mn ):
     P(f'endmodule // {mn}' )
     global rams, fifos
     for ram  in rams:  _make_ram( ram )
-    for fifo in fifos: _make_fifo( fifo )
+    for fifo in fifos: _make_fifo( fifo, with_file_header=False )
     fifos = {}
     rams = {}
 
@@ -1797,36 +1804,38 @@ def _make_ram( module_name ):
         P(f'//' )
         S.cmd( f'{ramgen_cmd} {module_name}', echo=False, echo_stdout=False )
 
-def _make_fifo( module_name ): 
+def _make_fifo( module_name, with_file_header=True ): 
     info = fifos[module_name]
+    wr = info['wr']
+    rd = info['rd']
     
-    module_header_begin( module_name )
+    module_header_begin( module_name, with_file_header=with_file_header )
 
     input(  clk,       1 )
     input(  reset_,    1 )
    
-    input(  'wr_pvld',   1 )
-    output( 'wr_prdy',   1 )
-    input(  'wr_pd',     info['w'] )
+    input(  f'{wr}_pvld',   1 )
+    output( f'{wr}_prdy',   1 )
+    input(  f'{wr}_pd',     info['w'] )
     
-    output( 'rd_pvld',   1 )
-    input(  'rd_prdy',   1 )
-    output( 'rd_pd',     info['w'] )
+    output( f'{rd}_pvld',   1 )
+    input(  f'{rd}_prdy',   1 )
+    output( f'{rd}_pd',     info['w'] )
     
     module_header_end( no_warn_filename=True )
 
     depth = info['depth']
     if depth == 0:
-        P(f'assign {wr_prdy,rd_pvld,rd_pd} = {rd_prdy,wr_pvld,wr_pd};' )
+        P(f'assign {{{wr}_prdy,{rd}_pvld,{rd}_pd}} = {{{rd}_prdy,{wr}_pvld,{wr}_pd}};' )
     elif depth == 1:
         P()
         P(f'// simple flop' )
         P(f'//' )
-        reg( 'rd_pvld', 1 )
-        reg( 'rd_pd', info['w'] )
+        reg( f'{rd}_pvld', 1 )
+        reg( f'{rd}_pd', info['w'] )
         always_at_posedge()
-        P(f'    rd_pvld <= wr_pvld;' )
-        P(f'    if ( wr_pvld ) rd_pd <= wr_pd;' )
+        P(f'    {rd}_pvld <= {wr}_pvld;' )
+        P(f'    if ( {wr}_pvld ) {rd}_pd <= {wr}_pd;' )
         P(f'end' )
     else:
         w     = info['w']
@@ -1839,57 +1848,57 @@ def _make_fifo( module_name ):
         P()
         P(f'// PUSH/POP' )
         P(f'//' ) 
-        reg( 'cnt', cnt_w )
-        P(f'wire wr_pushing = wr_pvld && wr_prdy;' )
-        P(f'wire rd_popping = rd_pvld && rd_prdy;' )
+        reg( f'cnt', cnt_w )
+        P(f'wire {wr}_pushing = {wr}_pvld && {wr}_prdy;' )
+        P(f'wire {rd}_popping = {rd}_pvld && {rd}_prdy;' )
         always_at_posedge()
         P(f'    if ( !{reset_} ) begin' )
         P(f'        cnt <= 0;' )
-        P(f'    end else if ( wr_pushing != rd_popping ) begin' )
+        P(f'    end else if ( {wr}_pushing != {rd}_popping ) begin' )
         P(f'        // {vlint_off_width}' )
-        P(f'        cnt <= cnt + wr_pushing - rd_popping;' )
+        P(f'        cnt <= cnt + {wr}_pushing - {rd}_popping;' )
         P(f'        // {vlint_on_width}' )
         P(f'    end' )
         P(f'end' )
         P()
         P(f'// WRITE SIDE' )
         P(f'//' ) 
-        reg( 'wr_adr', a_w )
-        P(f'assign wr_prdy = cnt != {depth} || rd_popping;' )
+        reg( f'{wr}_adr', a_w )
+        P(f'assign {wr}_prdy = cnt != {depth} || {rd}_popping;' )
         always_at_posedge()
         P(f'    if ( !{reset_} ) begin' )
-        P(f'        wr_adr <= 0;' )
-        P(f'    end else if ( wr_pushing ) begin' )
-        P(f'        case( wr_adr )' )
-        for i in range( depth ): P(f'            {a_w}\'d{i}: ram_ff{i} <= wr_pd;' )
+        P(f'        {wr}_adr <= 0;' )
+        P(f'    end else if ( {wr}_pushing ) begin' )
+        P(f'        case( {wr}_adr )' )
+        for i in range( depth ): P(f'            {a_w}\'d{i}: ram_ff{i} <= {wr}_pd;' )
         P(f'        endcase' )
         P()
-        P(f'        wr_adr <= (wr_adr == {depth-1}) ? 0 : (wr_adr+1);' )
+        P(f'        {wr}_adr <= ({wr}_adr == {depth-1}) ? 0 : ({wr}_adr+1);' )
         P(f'    end' )
         P(f'end' )
         P()
         P(f'// READ SIDE' )
         P(f'//' )
-        reg( 'rd_adr', a_w )
+        reg( f'{rd}_adr', a_w )
         always_at_posedge()
         P(f'    if ( !{reset_} ) begin' )
-        P(f'        rd_adr <= 0;' )
-        P(f'    end else if ( rd_popping ) begin' )
-        P(f'        rd_adr <= (rd_adr == {depth-1}) ? 0 : (rd_adr+1);' )
+        P(f'        {rd}_adr <= 0;' )
+        P(f'    end else if ( {rd}_popping ) begin' )
+        P(f'        {rd}_adr <= ({rd}_adr == {depth-1}) ? 0 : ({rd}_adr+1);' )
         P(f'    end' )
         P(f'end' )
         P()
-        P(f'assign rd_pvld = cnt != 0;' )
-        P(f'reg [{w-1}:0] rd_pd_p;' )
-        P(f'assign rd_pd = rd_pd_p;' )
+        P(f'assign {rd}_pvld = cnt != 0;' )
+        P(f'reg [{w-1}:0] {rd}_pd_p;' )
+        P(f'assign {rd}_pd = {rd}_pd_p;' )
         P(f'always @( * ) begin' )
-        P(f'    case( rd_adr )' )
-        for i in range( depth ): P(f'        {a_w}\'d{i}: rd_pd_p = ram_ff{i};' )
+        P(f'    case( {rd}_adr )' )
+        for i in range( depth ): P(f'        {a_w}\'d{i}: {rd}_pd_p = ram_ff{i};' )
         P(f'        // VCS coverage off' )
         P(f'        default: begin' )
-        P(f'            rd_pd_p = {w}\'d0;' )
+        P(f'            {rd}_pd_p = {w}\'d0;' )
         P(f'            // synopsys translate_off' )
-        P(  '            rd_pd_p = {'+f'{w}'+'{1\'bx}};' )
+        P(f'            {rd}_pd_p = {{{w}{{1\'bx}}}};' )
         P(f'            // synopsys translate_on' )
         P(f'            end' )
         P(f'        // VCS coverage on' )
