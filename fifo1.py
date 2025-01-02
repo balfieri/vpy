@@ -45,7 +45,7 @@ def make_fifo1( module_name ):
     header( module_name )
 
     P()
-    V.fifo( 'xx2fifo', 'fifo2xx', C.xx2fifo, 'pvld', 'prdy', C.fifo_d, m_name='', u_name='', with_wr_prdy=True, do_decl=False )
+    V.fifo( 'xx2fifo', 'fifo2xx', C.xx2fifo, 'pvld', 'prdy', C.fifo_d, with_wr_prdy=True, do_decl=False )
 
     idle = '!xx2fifo_pvld && !fifo2xx_pvld'
     P( f'assign fifo_idle = {idle};' )

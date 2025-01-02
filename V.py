@@ -1565,18 +1565,19 @@ def ram( iname, oname, sigs, depth, wr_cnt=1, rd_cnt=1, rw_cnt=0, clks=[], m_nam
     P(f'{m_name} {u_name}( {inst_sigs}' )
 
 #--------------------------------------------------------------------
-# Instantiates a fifo which will be generated later by module_footer()
+# Creates (if not already created) and instantiates a fifo which will be generated later by module_footer()
 #--------------------------------------------------------------------
-def fifo( iname, oname, sigs, pvld, prdy, depth, m_name='', u_name='', with_wr_prdy=True, do_decl=True ):
+def fifo( iname, oname, sigs, pvld, prdy, depth, m_name='', inst_name='', with_wr_prdy=True, do_decl=True ):
     if depth > 1: depth += 1
     w = 0
     for sig in sigs: w += sigs[sig]
 
-    if m_name == '': m_name = f'{module_name}_fifo_{depth}x{w}'
-    if u_name == '': u_name = f'u_{m_name}'
+    if m_name == '':    m_name = f'{module_name}_fifo_{depth}x{w}'
+    if inst_name == '': inst_name = f'u_{m_name}'
     wr = iname if iname != '' else 'wr'
     rd = oname if oname != '' else 'rd'
 
+    # if fifo already exists, then parameters should match (need to test this)
     fifos[m_name] = { 'm_name':         m_name,
                       'depth':          depth, 
                       'w':              w,
@@ -1588,8 +1589,16 @@ def fifo( iname, oname, sigs, pvld, prdy, depth, m_name='', u_name='', with_wr_p
                       'rd_reset_':      reset_,
                       'rd':             rd }
 
+    inst_fifo( fifos[m_name], inst_name, iname, oname, sigs, pvld, prdy, with_wr_prdy=with_wr_prdy, do_decl=do_decl )
+
+#--------------------------------------------------------------------
+# Instantiates an existing fifo (not normally used directly, rather it is used with fifo testing itself)
+#--------------------------------------------------------------------
+def inst_fifo( info, inst_name, iname, oname, sigs, pvld, prdy, with_wr_prdy=True, do_decl=True ):
     P()
     names = ', '.join( sigs.keys() )
+    depth = info['depth']
+    w     = info['w']
     P(f'// {depth}x{w} fifo for: {names}' )
     P(f'//' )
 
@@ -1614,10 +1623,16 @@ def fifo( iname, oname, sigs, pvld, prdy, depth, m_name='', u_name='', with_wr_p
         ins  += f'{iname}{sig}'
         outs += f'{oname}{sig}'
     
-    wr_clk    = fifos[m_name]['wr_clk']
-    wr_reset_ = fifos[m_name]['wr_reset_']
-
-    P(f'{m_name} {u_name}( .{wr_clk}({wr_clk}), .{wr_reset_}({wr_reset_}),' )
+    m_name    = info['m_name']
+    wr_clk    = info['wr_clk']
+    wr_reset_ = info['wr_reset_']
+    P(f'{m_name} {inst_name}( .{wr_clk}({wr_clk}), .{wr_reset_}({wr_reset_}),' )
+    if info['is_async']:
+        rd_clk    = info['rd_clk']
+        rd_reset_ = info['rd_reset_']
+        P(f'                        .{rd_clk}({rd_clk}), .{rd_reset_}({rd_reset_},' )
+    wr = info['wr']
+    rd = info['rd']
     P(f'                        .{wr}_pvld({iname_pvld}), .{wr}_prdy({iname_prdy}), .{wr}_pd('+'{'+f'{ins}'+'}),' )
     P(f'                        .{rd}_pvld({oname_pvld}), .{rd}_prdy({oname_prdy}), .{rd}_pd('+'{'+f'{outs}'+'}) );' )
 
@@ -1798,22 +1813,22 @@ def module_footer( mn ):
     P()
     P(f'endmodule // {mn}' )
     global rams, fifos
-    for ram  in rams:  gen_ram( ram )
-    for fifo in fifos: fifo_module( fifos[fifo], with_file_header=False )
+    for ram  in rams:  make_ram( ram )
+    for fifo in fifos: make_fifo( fifos[fifo], with_file_header=False )
     fifos = {}
     rams = {}
 
 def gen_ram( module_name ):
     info = rams[module_name]
     if ramgen_cmd == '':
-        S.die( f'gen_ram(): currently cannot generate rams without reinit( ramgen_cmd=... ) being set - restriction could be lifted' )
+        S.die( f'make_ram(): currently cannot generate rams without reinit( ramgen_cmd=... ) being set - restriction could be lifted' )
     else:
         P()
         P(f'// {module_name} generated externally using: {ramgen_cmd} {module_name}' )
         P(f'//' )
         S.cmd( f'{ramgen_cmd} {module_name}', echo=False, echo_stdout=False )
 
-def fifo_module( info, with_file_header=True ): 
+def make_fifo( info, with_file_header=True ): 
     m_name      = info['m_name']
     wr          = info['wr']
     rd          = info['rd']
@@ -1923,6 +1938,18 @@ def fifo_module( info, with_file_header=True ):
         P(f'end' )
     P()
     P(f'endmodule // {m_name}' )
+
+def inst_fifo1( module_name, inst_name, do_decls ):
+    if do_decls: 
+        V.wire( f'fifo_idle', 1 )
+        V.iface_wire( f'xx2fifo', C.xx2fifo, True, True )
+        V.iface_wire( f'fifo2xx', C.fifo2xx, True, True )
+    P()
+    P(f'{module_name} {inst_name}(' ) 
+    P(f'      .{V.clk}({V.clk}), .{V.reset_}({V.reset_}), .fifo_idle(fifo_idle)' )
+    V.iface_inst( f'xx2fifo', f'xx2fifo', C.xx2fifo, True, True )
+    V.iface_inst( f'fifo2xx', f'fifo2xx', C.fifo2xx, True, True )
+    P(f'    );' )
 
 #--------------------------------------------------------------------
 #--------------------------------------------------------------------
