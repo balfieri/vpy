@@ -1577,10 +1577,16 @@ def fifo( iname, oname, sigs, pvld, prdy, depth, m_name='', u_name='', with_wr_p
     wr = iname if iname != '' else 'wr'
     rd = oname if oname != '' else 'rd'
 
-    fifos[m_name] = { 'depth':   depth, 
-                      'w':       w,
-                      'wr':      wr,
-                      'rd':      rd }
+    fifos[m_name] = { 'm_name':         m_name,
+                      'depth':          depth, 
+                      'w':              w,
+                      'is_async':       False, # always for now
+                      'wr_clk':         clk,
+                      'wr_reset_':      reset_,
+                      'wr':             wr,
+                      'rd_clk':         clk,
+                      'rd_reset_':      reset_,
+                      'rd':             rd }
 
     P()
     names = ', '.join( sigs.keys() )
@@ -1608,7 +1614,10 @@ def fifo( iname, oname, sigs, pvld, prdy, depth, m_name='', u_name='', with_wr_p
         ins  += f'{iname}{sig}'
         outs += f'{oname}{sig}'
     
-    P(f'{m_name} {u_name}( .{clk}({clk}), .{reset_}({reset_}),' )
+    wr_clk    = fifos[m_name]['wr_clk']
+    wr_reset_ = fifos[m_name]['wr_reset_']
+
+    P(f'{m_name} {u_name}( .{wr_clk}({wr_clk}), .{wr_reset_}({wr_reset_}),' )
     P(f'                        .{wr}_pvld({iname_pvld}), .{wr}_prdy({iname_prdy}), .{wr}_pd('+'{'+f'{ins}'+'}),' )
     P(f'                        .{rd}_pvld({oname_pvld}), .{rd}_prdy({oname_prdy}), .{rd}_pd('+'{'+f'{outs}'+'}) );' )
 
@@ -1789,30 +1798,38 @@ def module_footer( mn ):
     P()
     P(f'endmodule // {mn}' )
     global rams, fifos
-    for ram  in rams:  _make_ram( ram )
-    for fifo in fifos: _make_fifo( fifo, with_file_header=False )
+    for ram  in rams:  gen_ram( ram )
+    for fifo in fifos: fifo_module( fifos[fifo], with_file_header=False )
     fifos = {}
     rams = {}
 
-def _make_ram( module_name ):
+def gen_ram( module_name ):
     info = rams[module_name]
     if ramgen_cmd == '':
-        S.die( f'make_ram(): currently cannot generate rams without reinit( ramgen_cmd=... ) being set - restriction will be lifted soon' )
+        S.die( f'gen_ram(): currently cannot generate rams without reinit( ramgen_cmd=... ) being set - restriction could be lifted' )
     else:
         P()
         P(f'// {module_name} generated externally using: {ramgen_cmd} {module_name}' )
         P(f'//' )
         S.cmd( f'{ramgen_cmd} {module_name}', echo=False, echo_stdout=False )
 
-def _make_fifo( module_name, with_file_header=True ): 
-    info = fifos[module_name]
-    wr = info['wr']
-    rd = info['rd']
-    
-    module_header_begin( module_name, with_file_header=with_file_header )
+def fifo_module( info, with_file_header=True ): 
+    m_name      = info['m_name']
+    wr          = info['wr']
+    rd          = info['rd']
+    is_async    = info['is_async']
+    wr_clk      = info['wr_clk']
+    wr_reset_   = info['wr_reset_']
+    rd_clk      = info['rd_clk']
+    rd_reset_   = info['rd_reset_']
 
-    input(  clk,       1 )
-    input(  reset_,    1 )
+    module_header_begin( m_name, with_file_header=with_file_header )
+
+    input(  wr_clk,         1 )
+    input(  wr_reset_,      1 )
+    if is_async:
+        input( rd_clk,      1 )
+        input( rd_reset_,   1 )
    
     input(  f'{wr}_pvld',   1 )
     output( f'{wr}_prdy',   1 )
@@ -1833,7 +1850,7 @@ def _make_fifo( module_name, with_file_header=True ):
         P(f'//' )
         reg( f'{rd}_pvld', 1 )
         reg( f'{rd}_pd', info['w'] )
-        always_at_posedge()
+        always_at_posedge( _clk=wr_clk )
         P(f'    {rd}_pvld <= {wr}_pvld;' )
         P(f'    if ( {wr}_pvld ) {rd}_pd <= {wr}_pd;' )
         P(f'end' )
@@ -1851,8 +1868,8 @@ def _make_fifo( module_name, with_file_header=True ):
         reg( f'cnt', cnt_w )
         P(f'wire {wr}_pushing = {wr}_pvld && {wr}_prdy;' )
         P(f'wire {rd}_popping = {rd}_pvld && {rd}_prdy;' )
-        always_at_posedge()
-        P(f'    if ( !{reset_} ) begin' )
+        always_at_posedge( _clk=wr_clk )
+        P(f'    if ( !{wr_reset_} ) begin' )
         P(f'        cnt <= 0;' )
         P(f'    end else if ( {wr}_pushing != {rd}_popping ) begin' )
         P(f'        // {vlint_off_width}' )
@@ -1865,8 +1882,8 @@ def _make_fifo( module_name, with_file_header=True ):
         P(f'//' ) 
         reg( f'{wr}_adr', a_w )
         P(f'assign {wr}_prdy = cnt != {depth} || {rd}_popping;' )
-        always_at_posedge()
-        P(f'    if ( !{reset_} ) begin' )
+        always_at_posedge( _clk=wr_clk )
+        P(f'    if ( !{wr_reset_} ) begin' )
         P(f'        {wr}_adr <= 0;' )
         P(f'    end else if ( {wr}_pushing ) begin' )
         P(f'        case( {wr}_adr )' )
@@ -1880,8 +1897,8 @@ def _make_fifo( module_name, with_file_header=True ):
         P(f'// READ SIDE' )
         P(f'//' )
         reg( f'{rd}_adr', a_w )
-        always_at_posedge()
-        P(f'    if ( !{reset_} ) begin' )
+        always_at_posedge( _clk=rd_clk )
+        P(f'    if ( !{rd_reset_} ) begin' )
         P(f'        {rd}_adr <= 0;' )
         P(f'    end else if ( {rd}_popping ) begin' )
         P(f'        {rd}_adr <= ({rd}_adr == {depth-1}) ? 0 : ({rd}_adr+1);' )
@@ -1905,7 +1922,7 @@ def _make_fifo( module_name, with_file_header=True ):
         P(f'    endcase' )
         P(f'end' )
     P()
-    P(f'endmodule // {module_name}' )
+    P(f'endmodule // {m_name}' )
 
 #--------------------------------------------------------------------
 #--------------------------------------------------------------------
