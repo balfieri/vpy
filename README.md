@@ -46,7 +46,7 @@ import C                # conventional config file
 ...
 </pre>
 
-# Available Functions
+# V.py
 
 You can find more detailed explanations in the comment blocks above the functions in S.py and V.py. Here's a brief summary of the functions available and their categories.
 
@@ -227,7 +227,7 @@ def tb_ram_write( ram_name, row, iname, sigs, do_decl=True )
 def tb_fifo( name, params, sigs, do_dprint=True )
 ```
 
-# Cache Generator - cache.py
+# cache.py - cache generator
 
 Separable cache components:
 
@@ -236,17 +236,16 @@ def tags( name, addr_w, tag_cnt, req_cnt, ref_cnt_max, incr_ref_cnt_max=1, decr_
 def filled_check( name, tag_i, r, tag_cnt, add_reg=True )
 ```
 
-Cache generator:
+Full cache generator:
 
-* in-progress
-
-Testbenches:
-
-* in-progress
+```python
+def make_cache( params )
+def tb_cache( name, params )
+```
 
 # Things To Do
 
-* Merge guts of l0c.py into cache.py
+* Merge guts of l0c.py into cache.py for start of general cache generator
 * Test logN-based logic
 * Test integer and fixed-point math
 * Beef up fifos
