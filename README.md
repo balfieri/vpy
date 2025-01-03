@@ -244,7 +244,8 @@ Testbenches:
 
 * in-progress
 
-Things to do:
+# Things To Do
+
 * Merge guts of l0c.py into cache.py
 * Test logN-based logic
 * Test integer and fixed-point math
