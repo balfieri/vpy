@@ -1569,39 +1569,49 @@ def ram( iname, oname, sigs, depth, wr_cnt=1, rd_cnt=1, rw_cnt=0, clks=[], m_nam
 
 #--------------------------------------------------------------------
 # Creates (if not already created) and instantiates a fifo which will be generated later by module_footer()
+# The fifop version takes a parameters dictionary as input.
 #--------------------------------------------------------------------
 def fifo( iname, oname, sigs, pvld, prdy, depth, m_name='', inst_name='', with_wr_prdy=True, do_decl=True ):
-    if depth > 1: depth += 1
+    params = { 'm_name':        m_name,
+               'depth':         depth }
+    fifop( params, iname, oname, sigs, pvld, prdy, depth, inst_name, wr_with_prdy, do_decl )
+
+def fifop( params, iname, oname, sigs, pvld, prdy, inst_name='', with_wr_prdy=True, do_decl=True ):
+    if 'depth' not in params: S.die( 'fifop: depth not specified' )
+    if params['depth'] < 1: S.die( 'fifop: depth must be >= 1' )
+
     w = 0
     for sig in sigs: w += sigs[sig]
+    if 'w' in params and w != params['w']: S.die( f'fifop: width w does not match expected sigs width of {w}' )
+    params['w'] = w
 
-    if m_name == '':    m_name = f'{module_name}_fifo_{depth}x{w}'
-    if inst_name == '': inst_name = f'u_{m_name}'
-    wr = iname if iname != '' else 'wr'
-    rd = oname if oname != '' else 'rd'
+    if 'm_name' not in params or params['m_name'] == '': params['m_name'] = f'{module_name}_fifo_{depth}x{w}'
+    if inst_name == '': inst_name = 'u_' + params['m_name']
+
+    if 'is_async' in params and params['is_async']: S.die( f'fifop: is_async=True is not currently allowed' )
+    params['is_async'] = False
+
+    if 'wr_clk' not in params: params['wr_clk'] = clk
+    if 'rd_clk' not in params: params['rd_clk'] = clk
+    if 'wr_reset_' not in params: params['wr_reset_'] = reset_
+    if 'rd_reset_' not in params: params['rd_reset_'] = reset_
+
+    if 'wr' not in params or iname == '': params['wr'] = 'wr'
+    if 'rd' not in params or iname == '': params['rd'] = 'rd'
 
     # if fifo already exists, then parameters should match (need to test this)
-    fifos[m_name] = { 'm_name':         m_name,
-                      'depth':          depth, 
-                      'w':              w,
-                      'is_async':       False, # always for now
-                      'wr_clk':         clk,
-                      'wr_reset_':      reset_,
-                      'wr':             wr,
-                      'rd_clk':         clk,
-                      'rd_reset_':      reset_,
-                      'rd':             rd }
+    fifos[m_name] = params.copy()
 
     inst_fifo( fifos[m_name], inst_name, iname, oname, sigs, pvld, prdy, with_wr_prdy=with_wr_prdy, do_decl=do_decl )
 
 #--------------------------------------------------------------------
 # Instantiates an existing fifo (not normally used directly, rather it is used with fifo testing itself)
 #--------------------------------------------------------------------
-def inst_fifo( info, inst_name, iname, oname, sigs, pvld, prdy, with_wr_prdy=True, do_decl=True, do_dprint=False ):
+def inst_fifo( params, inst_name, iname, oname, sigs, pvld, prdy, with_wr_prdy=True, do_decl=True, do_dprint=False ):
     P()
     names = ', '.join( sigs.keys() )
-    depth = info['depth']
-    w     = info['w']
+    depth = params['depth']
+    w     = params['w']
     P(f'// {depth}x{w} fifo for: {names}' )
     P(f'//' )
 
@@ -1624,192 +1634,22 @@ def inst_fifo( info, inst_name, iname, oname, sigs, pvld, prdy, with_wr_prdy=Tru
         ins  += f'{iname}_{sig}'
         outs += f'{oname}_{sig}'
     
-    m_name    = info['m_name']
-    wr_clk    = info['wr_clk']
-    wr_reset_ = info['wr_reset_']
+    m_name    = params['m_name']
+    wr_clk    = params['wr_clk']
+    wr_reset_ = params['wr_reset_']
     P(f'{m_name} {inst_name}( .{wr_clk}({wr_clk}), .{wr_reset_}({wr_reset_}),' )
-    if info['is_async']:
-        rd_clk    = info['rd_clk']
-        rd_reset_ = info['rd_reset_']
+    if params['is_async']:
+        rd_clk    = params['rd_clk']
+        rd_reset_ = params['rd_reset_']
         P(f'                        .{rd_clk}({rd_clk}), .{rd_reset_}({rd_reset_},' )
-    wr = info['wr']
-    rd = info['rd']
+    wr = params['wr']
+    rd = params['rd']
     P(f'                        .{wr}_pvld({iname_pvld}), .{wr}_prdy({iname_prdy}), .{wr}_pd('+'{'+f'{ins}'+'}),' )
     P(f'                        .{rd}_pvld({oname_pvld}), .{rd}_prdy({oname_prdy}), .{rd}_pd('+'{'+f'{outs}'+'}) );' )
     if do_dprint:
         iface_dprint( iname, sigs, f'{wr_reset_} && {iname_pvld} && {iname_prdy}' )
         iface_dprint( oname, sigs, f'{wr_reset_} && {oname_pvld} && {iname_prdy}' )
 
-#--------------------------------------------------------------------
-# Generate cache tags handling.
-#--------------------------------------------------------------------
-def cache_tags( name, addr_w, tag_cnt, req_cnt, ref_cnt_max, incr_ref_cnt_max=1, decr_req_cnt=0, can_always_alloc=False, custom_avails=False ):
-    if incr_ref_cnt_max < 1: S.die( f'cache_tags: incr_ref_cnt_max needs to be at least 1' )
-    if decr_req_cnt == 0: decr_req_cnt = req_cnt
-
-    P()
-    P(f'// {name} cache tags: addr_w={addr_w} tag_cnt={tag_cnt} req_cnt={req_cnt} ref_cnt_max={ref_cnt_max}' )
-    P(f'//' )
-    tag_i_w = max( 1, log2( tag_cnt ) )
-    req_i_w = max( 1, log2( req_cnt ) )
-    name_uc = name.upper()
-    enum( f'{name_uc}_', ['MISS_CANT_ALLOC', 'MISS', 'HIT', 'HIT_BEING_FILLED'] )
-    ref_cnt_w = log2( ref_cnt_max+1 )
-    for i in range(tag_cnt): reg( f'{name}__ref_cnt{i}', ref_cnt_w )
-    reg( f'{name}__vlds', tag_cnt )
-    for i in range(tag_cnt): reg( f'{name}__addr{i}', addr_w )
-    reg( f'{name}__filleds', tag_cnt )
-
-    P()
-    P(f'// {name} hit checks' )
-    P(f'//' )
-    hits = ''
-    needs_allocs = []
-    for r in range(req_cnt):
-        wirea( f'{name}_req{r}__hit_one_hot', tag_cnt, concata( [f'{name}_req{r}_pvld && {name}__vlds[{i}] && {name}_req{r}_addr == {name}__addr{i}' for i in range(tag_cnt)], 1 ) )
-        one_hot_to_binary( f'{name}_req{r}__hit_one_hot', tag_cnt, f'{name}_req{r}__hit_i', f'{name}_req{r}__hit_vld' )
-        wirea( f'{name}_req{r}_hit_and_filled', 1, f'{name}_req{r}__hit_vld && ({name}_req{r}__hit_one_hot & {name}__filleds) == {name}_req{r}__hit_one_hot' )
-        wirea( f'{name}_req{r}__needs_alloc', 1, f'{name}_req{r}_pvld && !{name}_req{r}__hit_vld' )
-        if r != 0: hits += ' | '
-        hits += f'{name}_req{r}__hit_one_hot'
-        needs_allocs.append( f'{name}_req{r}__needs_alloc' )
-    wirea( f'{name}__hits', tag_cnt, hits )
-    wirea( f'{name}__needs_allocs', req_cnt, concata( needs_allocs, 1 ) )
-
-    P()
-    P(f'// {name} alloc' )
-    P(f'//' )
-    wirea( f'{name}__need_alloc_pvld', 1, f'|{name}__needs_allocs' )
-    if custom_avails:
-        wire( f'{name}__avails', tag_cnt )
-    else:
-        avails = []
-        for i in range(tag_cnt):
-            avails.append( f'{name}__need_alloc_pvld && !{name}__hits[{i}] && {name}__ref_cnt{i} == 0' )
-        wirea( f'{name}__avails', tag_cnt, concata( avails, 1 ) )
-    choose_eligible( f'{name}__alloc_avail_chosen_i', f'{name}__avails', tag_cnt, f'{name}__avail_preferred_i', gen_preferred=True )
-    wirea( f'{name}__alloc_pvld', 1, f'{name}__avails_any_vld' )
-    choose_eligible( f'{name}__alloc_req_chosen_i',  f'{name}__needs_allocs', req_cnt, f'{name}__alloc_req_preferred_i', gen_preferred=True )
-    addrs = [ f'{name}_req{i}_addr' for i in range(req_cnt) ]
-    muxa( f'{name}__alloc_addr', addr_w, f'{name}__alloc_req_chosen_i', addrs )
-    binary_to_one_hot( f'{name}__alloc_avail_chosen_i', tag_cnt, r=f'{name}__alloc_avail_chosen_one_hot', pvld=f'{name}__alloc_pvld' )
-    always_at_posedge()
-    P(f'    if ( !{reset_} ) begin' )
-    P(f'        {name}__vlds <= 0;' )
-    P(f'    end else begin' )
-    for i in range(tag_cnt):
-        P(f'        if ( {name}__alloc_pvld && {name}__alloc_avail_chosen_i == {i} ) begin' )
-        P(f'            {name}__vlds[{i}] <= 1\'b1;' )
-        P(f'            {name}__addr{i} <= {name}__alloc_addr;' )
-        P(f'        end' )
-    P(f'    end' )
-    P(f'end' )
-
-    P()
-    P(f'// {name} statuses' )
-    P(f'//' )
-    for r in range(req_cnt):
-        if can_always_alloc:
-            wirea( f'{name}_req{r}_status', 2, f'{name}_req{r}_hit_and_filled ? {name_uc}_HIT : {name}_req{r}__hit_vld ? {name_uc}_HIT_BEING_FILLED : {name_uc}_MISS' )
-            dassert( f'!{name}_req{r}__needs_alloc || ({name}__alloc_pvld && {name}__alloc_req_chosen_i == {i})', f'{name} has can_always_alloc=True but can\'t alloc for req{r}' )
-        else:
-            wirea( f'{name}_req{r}_status', 2, f'{name}_req{r}_hit_and_filled ? {name_uc}_HIT : {name}_req{r}__hit_vld ? {name_uc}_HIT_BEING_FILLED : ({name}__alloc_pvld && {name}__alloc_req_chosen_i == {r}) ? {name_uc}_MISS : {name_uc}_MISS_CANT_ALLOC' )
-        wirea( f'{name}_req{r}_tag_i', tag_i_w, f'{name}_req{r}__hit_vld ? {name}_req{r}__hit_i : {name}__alloc_avail_chosen_i' )
-        sigs = { 'addr': addr_w, 
-                 'tag_i': tag_i_w,
-                 'status': 2 }
-        if incr_ref_cnt_max > 1: sigs['incr_cnt'] = log2(incr_ref_cnt_max+1)
-        iface_dprint( f'{name}_req{r}', sigs, f'{name}_req{r}_pvld' )
-
-    P()
-    P(f'// {name} decrements' )
-    P(f'//' )
-    decrs = ''
-    for r in range(decr_req_cnt):
-        binary_to_one_hot( f'{name}_decr{r}_tag_i', tag_cnt, f'{name}_decr{r}__one_hot', f'{name}_decr{r}_pvld' )
-        if r != 0: decrs += ' | '
-        decrs += f'{name}_decr{r}__one_hot'
-        iface_dprint( f'{name}_decr{r}', { 'tag_i': tag_i_w }, f'{name}_decr{r}_pvld' )
-    wirea( f'{name}__decrs', tag_cnt, decrs )
-
-    P()
-    P(f'// {name} fill' )
-    P(f'//' )
-    binary_to_one_hot( f'{name}_fill_tag_i', tag_cnt, f'{name}__fills', f'{name}_fill_pvld' )
-    iface_dprint( f'{name}_fill', { 'tag_i': tag_i_w }, f'{name}_fill_pvld' )
-
-    P()
-    P(f'// {name} ref_cnt updates' )
-    P(f'//' )
-    P(f'// {vlint_off_width}' )
-    always_at_posedge()
-    P(f'    if ( !{reset_} ) begin' )
-    for i in range(tag_cnt): 
-        P(f'        {name}__ref_cnt{i} <= 0;' )
-    P(f'    end else begin' )
-    for i in range(tag_cnt): 
-        bool_expr = f'{name}__alloc_avail_chosen_one_hot[{i}]'
-        sum_expr = f'{name}__ref_cnt{i}'
-        sum_expr += f' + {name}__alloc_avail_chosen_one_hot[{i}]'
-        for r in range(req_cnt):
-            bool_expr += f' || {name}_req{r}__hit_one_hot[{i}]'
-            sum_expr  += f' + {name}_req{r}__hit_one_hot[{i}]'
-        for r in range(decr_req_cnt):
-            bool_expr += f' || {name}_decr{r}__one_hot[{i}]'
-            sum_expr  += f' - {name}_decr{r}__one_hot[{i}]'
-        P(f'        if ( {bool_expr} ) begin' )
-        P(f'            {name}__ref_cnt{i} <= {sum_expr};' )
-        P(f'        end' )
-    P(f'    end' )
-    P(f'end' )
-    P(f'// {vlint_on_width}' )
-
-    P()
-    P(f'// {name} filled updates' )
-    P(f'//' )
-    always_at_posedge()
-    P(f'    if ( |{name}__alloc_avail_chosen_one_hot || {name}_fill_pvld ) begin' )
-    P(f'        {name}__filleds <= (~{name}__alloc_avail_chosen_one_hot & {name}__filleds) | {name}__fills;' )
-    P(f'    end' )
-    P(f'end' )
-
-    P()
-    P(f'// {name} assertions' )
-    P(f'//' )
-    dassert_no_x( f'{name}__vlds' )
-    dassert_no_x( f'{name}__filleds & {name}__vlds' )
-    dassert_no_x( f'{name}__hits' )
-    dassert_no_x( f'{name}__alloc_avail_chosen_one_hot' )
-    dassert_no_x( f'{name}__fills' )
-    dassert_no_x( f'{name}__decrs' )
-    dassert( f'({name}__hits & {name}__alloc_avail_chosen_one_hot) === {tag_cnt}\'d0', f'{name} has hit and alloc to the same slot' )
-    dassert( f'({name}__fills & {name}__filleds) === {tag_cnt}\'d0', f'{name} has fill of already filled slot' )
-    dassert( f'({name}__decrs & {name}__vlds) === {name}__decrs', f'{name} has decr-ref-cnt of slot with ref_cnt==0' )
-    for i in range(tag_cnt):
-        dassert( f'{name}__ref_cnt{i} !== 0 || {name}_decr{r}__one_hot[{i}] === 0 || {name}_req{r}__hit_one_hot[{i}] == 1', f'{name}__ref_cnt{i} underflow' )
-        dassert( f'{name}__alloc_avail_chosen_one_hot[{i}] === 0 || {name}_req{r}__hit_one_hot[{i}] === 0', f'{name}__ref_cnt{i} alloc and hit at same time' )
-        dassert( f'{name}__ref_cnt{i} !== {ref_cnt_max} || ({name}__alloc_avail_chosen_one_hot[{i}] === 0 && {name}_req{r}__hit_one_hot[{i}] === 0)', f'{name}__ref_cnt{i} overflow' )
-    expr = ''
-    for i in range(tag_cnt-1):
-        for j in range(i+1, tag_cnt):
-            if expr != '': expr += ' && '
-            expr += f'(!{name}__vlds[{i}] || !{name}__vlds[{j}] || {name}__addr{i} !== {name}__addr{j})'
-    dassert( f'{expr}', f'{name} has duplicate tags' )
-
-    P()
-    P(f'// {name} idle' )
-    P(f'//' )
-    idle = f'!{name}_fill_pvld'
-    for i in range(tag_cnt): idle += f' && {name}__ref_cnt{i} == 0'
-    for r in range(req_cnt): idle += f' && !{name}_req{r}_pvld' 
-    wirea( f'{name}_idle', 1, idle )
-
-#--------------------------------------------------------------------
-# Check that filling a cache tag that expects it.
-#--------------------------------------------------------------------
-def cache_filled_check( name, tag_i, r, tag_cnt, add_reg=True ):
-    mux_subword( r, 1, tag_i, f'{name}__filleds', tag_cnt, add_reg=add_reg )
-    
 #--------------------------------------------------------------------
 # MODULE FOOTER
 #--------------------------------------------------------------------
@@ -1832,15 +1672,15 @@ def gen_ram( module_name ):
         P(f'//' )
         S.cmd( f'{ramgen_cmd} {module_name}', echo=False, echo_stdout=False )
 
-def make_fifo( info, with_file_header=True ): 
-    m_name      = info['m_name']
-    wr          = info['wr']
-    rd          = info['rd']
-    is_async    = info['is_async']
-    wr_clk      = info['wr_clk']
-    wr_reset_   = info['wr_reset_']
-    rd_clk      = info['rd_clk']
-    rd_reset_   = info['rd_reset_']
+def make_fifo( params, with_file_header=True ): 
+    m_name      = params['m_name']
+    wr          = params['wr']
+    rd          = params['rd']
+    is_async    = params['is_async']
+    wr_clk      = params['wr_clk']
+    wr_reset_   = params['wr_reset_']
+    rd_clk      = params['rd_clk']
+    rd_reset_   = params['rd_reset_']
 
     module_header_begin( m_name, with_file_header=with_file_header )
 
@@ -1852,15 +1692,15 @@ def make_fifo( info, with_file_header=True ):
    
     input(  f'{wr}_pvld',   1 )
     output( f'{wr}_prdy',   1 )
-    input(  f'{wr}_pd',     info['w'] )
+    input(  f'{wr}_pd',     params['w'] )
     
     output( f'{rd}_pvld',   1 )
     input(  f'{rd}_prdy',   1 )
-    output( f'{rd}_pd',     info['w'] )
+    output( f'{rd}_pd',     params['w'] )
     
     module_header_end( no_warn_filename=True )
 
-    depth = info['depth']
+    depth = params['depth']
     if depth == 0:
         P(f'assign {{{wr}_prdy,{rd}_pvld,{rd}_pd}} = {{{rd}_prdy,{wr}_pvld,{wr}_pd}};' )
     elif depth == 1:
@@ -1868,13 +1708,13 @@ def make_fifo( info, with_file_header=True ):
         P(f'// simple flop' )
         P(f'//' )
         reg( f'{rd}_pvld', 1 )
-        reg( f'{rd}_pd', info['w'] )
+        reg( f'{rd}_pd', params['w'] )
         always_at_posedge( _clk=wr_clk )
         P(f'    {rd}_pvld <= {wr}_pvld;' )
         P(f'    if ( {wr}_pvld ) {rd}_pd <= {wr}_pd;' )
         P(f'end' )
     else:
-        w     = info['w']
+        w     = params['w']
         a_w   = log2( depth )
         cnt_w = a_w
         cnt_w = (a_w+1) if (1 << a_w) >= depth else a_w
@@ -2207,10 +2047,10 @@ def tb_ram_read( ram_name, row, oname, sigs, do_decl=True ):
 def tb_ram_write( ram_name, row, iname, sigs, do_decl=True ):
     iface_combine( iname, f'{ram_name}[{row}]', sigs, do_decl )
 
-def tb_fifo( name, info, sigs, do_dprint=True ):
-    module_name = info['m_name']
-    wr          = info['wr']
-    rd          = info['rd']
+def tb_fifo( name, params, sigs, do_dprint=True ):
+    module_name = params['m_name']
+    wr          = params['wr']
+    rd          = params['rd']
 
     P(f'// Testbench for {module_name}.v with the following properties beyond those of the fifo:' )
     P(f'// - incrementing input data' )
@@ -2228,7 +2068,7 @@ def tb_fifo( name, info, sigs, do_dprint=True ):
     tb_rand_init()
 
     iface_wire( wr, sigs, True, False )
-    inst_fifo( info, f'u_{name}', wr, rd, sigs, 'pvld', 'prdy', do_dprint=do_dprint )
+    inst_fifo( params, f'u_{name}', wr, rd, sigs, 'pvld', 'prdy', do_dprint=do_dprint )
 
     P() 
     P( f'// PLUSARGS' )
@@ -2245,8 +2085,8 @@ def tb_fifo( name, info, sigs, do_dprint=True ):
     reg( 'rd_cnt', 32 )
     tb_randbits( 'can_wr', 1 )
     tb_randbits( 'can_rd', 1 )
-    reg( f'wr_dat', info['w'] )
-    reg( f'rd_dat', info['w'] ) # expected
+    reg( f'wr_dat', params['w'] )
+    reg( f'rd_dat', params['w'] ) # expected
     P( f'assign {wr}_pvld = can_wr && wr_cnt < wr_cnt_max;' )
     P( f'assign {wr}_dat  = wr_dat;' )
     P( f'assign {rd}_prdy = can_rd;' )

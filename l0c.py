@@ -6,6 +6,7 @@ import S
 import V
 import C
 import math
+import cache
 
 P = print
 
@@ -83,7 +84,7 @@ def make_l0c( module_name ):
     V.wirea( f'tags_fill_req_id', C.l0c_req_id_w, f'mem2l0c_d_tag_id[{C.l0c_mem_tag_id_w-1}:{C.l0c_subword_w+C.l0c_slot_id_w}]' )
     V.mux_subword( f'tags_fill_dat', C.l0c_dat_w, f'tags_fill_subword_i', f'mem2l0c_d_dat', C.mem_dat_w )
 
-    V.cache_tags( f'tags', C.l0c_addr_w, C.l0c_slot_cnt, 1, C.l0c_ref_cnt_max )
+    cache.tags( f'tags', C.l0c_addr_w, C.l0c_slot_cnt, 1, C.l0c_ref_cnt_max )
 
     P()
     P( f'// TAGS STATUS' )

@@ -6,6 +6,7 @@ import S
 import V
 import C
 import math
+import cache
 
 P = print
 
@@ -68,7 +69,7 @@ def make_l0c_tags( module_name ):
     V.wirea( f'tags_fill_pvld', 1, f'xx2l0c_tags_fill_dat_d_pvld' )
     V.wirea( f'tags_fill_tag_i', C.l0c_slot_id_w, f'xx2l0c_tags_fill_dat_d_tag_i' )
 
-    V.cache_tags( f'tags', C.l0c_addr_w, C.l0c_slot_cnt, 1, C.l0c_ref_cnt_max )
+    cache.tags( f'tags', C.l0c_addr_w, C.l0c_slot_cnt, 1, C.l0c_ref_cnt_max )
 
     P()
     P( f'// TAGS STATUS' )

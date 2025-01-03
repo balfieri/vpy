@@ -3,6 +3,11 @@ For now, you'll need to read the comments in V.py to see what is available.
 
 S.py is a Python module that has a few system helper functions unrelated to Verilog.
 
+There are also some higher-level generators and that sit above V.py. They generate designs 
+as well as corresponding testbenches. Specific functions are described down below.
+
+* cache.py - generates various types of caches and cache components
+
 # Examples
 
 The following examples are provided. Each has an associated testbench around it. So if the design is
@@ -203,8 +208,7 @@ def rom_1d( i0, names, entries, nesting=0, result_w=None )
 def rom_2d( i0, i1, names, entries, nesting=0, result_w=None )
 def ram( iname, oname, sigs, depth, wr_cnt=1, rd_cnt=1, rw_cnt=0, clks=[], m_name='', u_name='', add_blank_line=True )
 def fifo( iname, oname, sigs, pvld, prdy, depth, m_name='', u_name='', with_wr_prdy=True )
-def cache_tags( name, addr_w, tag_cnt, req_cnt, ref_cnt_max, incr_ref_cnt_max=1, decr_req_cnt=0, can_always_alloc=False, custom_avails=False )
-def cache_filled_check( name, tag_i, r, tag_cnt, add_reg=True )
+def fifop( params, iname, oname, sigs, pvld, prdy, u_name='', with_wr_prdy=True )
 ```
 
 ## Testbenches
@@ -220,17 +224,28 @@ def tb_ram_decl( ram_name, d, sigs )
 def tb_ram_file( ram_name, file_name, sigs, is_hex_data=True )
 def tb_ram_read( ram_name, row, oname, sigs, do_decl=True )
 def tb_ram_write( ram_name, row, iname, sigs, do_decl=True )
-def tb_fifo( name, info, sigs, do_dprint=True )
+def tb_fifo( name, params, sigs, do_dprint=True )
 ```
 
+## Cache Generator - cache.py
+
+Separable cache components:
+
+```python
+def tags( name, addr_w, tag_cnt, req_cnt, ref_cnt_max, incr_ref_cnt_max=1, decr_req_cnt=0, can_always_alloc=False, custom_avails=False )
+def filled_check( name, tag_i, r, tag_cnt, add_reg=True )
+```
+
+Cache generator:
+
+* in-progress
+
+Testbenches:
+
+* in-progress
+
 Things to do:
-* Refactor so that low-level TB stuff is done in V.py for:
-  * arb_rr - arb_rr1 becomes a trivial wrapper
-* Change l0c.py to a general cache generator, cache.py
-  * move cache_tags stuff to that generator
-  * move TB stuff to cache.py
-  * l0c.py becomes simple wrapper
-* Refactor so we pass a parameters dictionary into each generator
+* Merge guts of l0c.py into cache.py
 * Test logN-based logic
 * Test integer and fixed-point math
 * Beef up fifos
