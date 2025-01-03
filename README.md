@@ -227,7 +227,7 @@ def tb_ram_write( ram_name, row, iname, sigs, do_decl=True )
 def tb_fifo( name, params, sigs, do_dprint=True )
 ```
 
-## Cache Generator - cache.py
+# Cache Generator - cache.py
 
 Separable cache components:
 
