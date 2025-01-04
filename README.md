@@ -261,7 +261,8 @@ then the fifo module itself will get generated at the end of the current module:
 def stage( params, iname, oname, sigs, pvld='pvld', prdy='prdy', inst_name='', with_wr_prdy=True )
 ```
 
-These generate a fifo module or a corresponding testbench module, and should not be called from inside a module:
+These generate a fifo module or a corresponding testbench module, and should not be called from inside a module. If you always use stage(),
+you need not call these. They are mainly for fifo testing and for those who want the fifo module in a separate file:
 
 ```python
 def make( params )
@@ -276,17 +277,18 @@ def inst( params, inst_name, iname, oname, sigs, pvld='pvld', prdy='prdy', with_
 
 ## cache.py - cache generator
 
-These are cache components that get inserted inside the current module. Normally, one does not use these directly:
-
-```python
-def tags( name, addr_w, tag_cnt, req_cnt, ref_cnt_max, incr_ref_cnt_max=1, decr_req_cnt=0, can_always_alloc=False, custom_avails=False )
-```
-
 These generate a cache module or a corresponding testbench module, and should not be called from inside a module:
 
 ```python
 def make( params )
 def make_tb( name, params )
+```
+
+These are cache components that get inserted inside the current module. Normally, one does not use these directly, 
+but they provided for the rare cases where one would want to use them for a custom cache not supported by the generator:
+
+```python
+def tags( name, addr_w, tag_cnt, req_cnt, ref_cnt_max, incr_ref_cnt_max=1, decr_req_cnt=0, can_always_alloc=False, custom_avails=False )
 ```
 
 # Things To Do

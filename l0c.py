@@ -5,7 +5,6 @@
 import S
 import V
 import C
-import math
 import cache
 
 P = print
