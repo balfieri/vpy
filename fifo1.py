@@ -11,6 +11,7 @@ P = print
 def reinit():
     global params, xx2fifo, fifo2xx
 
+    # normally, this stuff would go in a C.py config file
     xx2fifo = { 'dat': 8 }
     fifo2xx = xx2fifo.copy()
 
