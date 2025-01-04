@@ -1,4 +1,4 @@
-# Copyright (c) 2017-2024 Robert A. Alfieri
+# Copyright (c) 2017-2025 Robert A. Alfieri
 # 
 # Permission is hereby granted, free of charge, to any person obtaining a copy
 # of this software and associated documentation files (the "Software"), to deal
@@ -26,7 +26,7 @@ P = print
 
 def reinit( _clk='clk', _reset_='reset_', _vdebug=True, _vassert=True, _ramgen_cmd='' ):
     global clk, reset_, vdebug, vassert, ramgen_cmd
-    global module_name, rams, fifos
+    global module_name, rams, post_modules
     global default_rand_seed_z_init, default_rand_seed_w_init, rand_seed_z_init_addend, rand_seed_w_init_addend, seed_i
     global custom_cla
     global io
@@ -44,7 +44,7 @@ def reinit( _clk='clk', _reset_='reset_', _vdebug=True, _vassert=True, _ramgen_c
     io = []
     in_module_header = False
     rams = {}
-    fifos = {}
+    post_modules = {}
     default_rand_seed_z_init = "32'h12345678"
     default_rand_seed_w_init = "32'hbabecaf3"
     rand_seed_z_init_addend = 0
@@ -1568,99 +1568,16 @@ def ram( iname, oname, sigs, depth, wr_cnt=1, rd_cnt=1, rw_cnt=0, clks=[], m_nam
     P(f'{m_name} {u_name}( {inst_sigs}' )
 
 #--------------------------------------------------------------------
-# Creates (if not already created) and instantiates a fifo which will be generated later by module_footer()
-# The fifop version takes a parameters dictionary as input.
-#--------------------------------------------------------------------
-def fifo( iname, oname, sigs, pvld, prdy, depth, m_name='', inst_name='', with_wr_prdy=True, do_decl=True ):
-    params = { 'm_name':        m_name,
-               'depth':         depth }
-    fifop( params, iname, oname, sigs, pvld, prdy, depth, inst_name, wr_with_prdy, do_decl )
-
-def fifop( params, iname, oname, sigs, pvld, prdy, inst_name='', with_wr_prdy=True, do_decl=True ):
-    if 'depth' not in params: S.die( 'fifop: depth not specified' )
-    if params['depth'] < 1: S.die( 'fifop: depth must be >= 1' )
-
-    w = 0
-    for sig in sigs: w += sigs[sig]
-    if 'w' in params and w != params['w']: S.die( f'fifop: width w does not match expected sigs width of {w}' )
-    params['w'] = w
-
-    if 'm_name' not in params or params['m_name'] == '': params['m_name'] = f'{module_name}_fifo_{depth}x{w}'
-    if inst_name == '': inst_name = 'u_' + params['m_name']
-
-    if 'is_async' in params and params['is_async']: S.die( f'fifop: is_async=True is not currently allowed' )
-    params['is_async'] = False
-
-    if 'wr_clk' not in params: params['wr_clk'] = clk
-    if 'rd_clk' not in params: params['rd_clk'] = clk
-    if 'wr_reset_' not in params: params['wr_reset_'] = reset_
-    if 'rd_reset_' not in params: params['rd_reset_'] = reset_
-
-    if 'wr' not in params or iname == '': params['wr'] = 'wr'
-    if 'rd' not in params or iname == '': params['rd'] = 'rd'
-
-    # if fifo already exists, then parameters should match (need to test this)
-    fifos[m_name] = params.copy()
-
-    inst_fifo( fifos[m_name], inst_name, iname, oname, sigs, pvld, prdy, with_wr_prdy=with_wr_prdy, do_decl=do_decl )
-
-#--------------------------------------------------------------------
-# Instantiates an existing fifo (not normally used directly, rather it is used with fifo testing itself)
-#--------------------------------------------------------------------
-def inst_fifo( params, inst_name, iname, oname, sigs, pvld, prdy, with_wr_prdy=True, do_decl=True, do_dprint=False ):
-    P()
-    names = ', '.join( sigs.keys() )
-    depth = params['depth']
-    w     = params['w']
-    P(f'// {depth}x{w} fifo for: {names}' )
-    P(f'//' )
-
-    ins = ''
-    outs = ''
-    iname_pvld = f'{iname}_{pvld}'
-    iname_prdy = f'{iname}_{prdy}'
-    oname_pvld = f'{oname}_{pvld}'
-    oname_prdy = f'{oname}_{prdy}'
-    if with_wr_prdy: 
-        if do_decl: wire( iname_prdy, 1 )
-    else:
-        iname_prdy = ''
-    if do_decl: wire( oname_pvld, 1 )
-    if do_decl: wire( oname_prdy, 1 )
-    for sig in sigs:
-        if do_decl: wire( f'{oname}_{sig}', sigs[sig] )
-        if ins  != '': ins  += ', '
-        if outs != '': outs += ', '
-        ins  += f'{iname}_{sig}'
-        outs += f'{oname}_{sig}'
-    
-    m_name    = params['m_name']
-    wr_clk    = params['wr_clk']
-    wr_reset_ = params['wr_reset_']
-    P(f'{m_name} {inst_name}( .{wr_clk}({wr_clk}), .{wr_reset_}({wr_reset_}),' )
-    if params['is_async']:
-        rd_clk    = params['rd_clk']
-        rd_reset_ = params['rd_reset_']
-        P(f'                        .{rd_clk}({rd_clk}), .{rd_reset_}({rd_reset_},' )
-    wr = params['wr']
-    rd = params['rd']
-    P(f'                        .{wr}_pvld({iname_pvld}), .{wr}_prdy({iname_prdy}), .{wr}_pd('+'{'+f'{ins}'+'}),' )
-    P(f'                        .{rd}_pvld({oname_pvld}), .{rd}_prdy({oname_prdy}), .{rd}_pd('+'{'+f'{outs}'+'}) );' )
-    if do_dprint:
-        iface_dprint( iname, sigs, f'{wr_reset_} && {iname_pvld} && {iname_prdy}' )
-        iface_dprint( oname, sigs, f'{wr_reset_} && {oname_pvld} && {iname_prdy}' )
-
-#--------------------------------------------------------------------
 # MODULE FOOTER
 #--------------------------------------------------------------------
 def module_footer( mn ):
     P()
     P(f'endmodule // {mn}' )
-    global rams, fifos
+    global rams, post_modules
     for ram  in rams:  make_ram( ram )
-    for fifo in fifos: make_fifo( fifos[fifo], with_file_header=False )
-    fifos = {}
+    for post in post_modules: post['generator']( post['params'], with_file_header=False )
     rams = {}
+    post_modules = {}
 
 def gen_ram( module_name ):
     info = rams[module_name]
@@ -1671,121 +1588,6 @@ def gen_ram( module_name ):
         P(f'// {module_name} generated externally using: {ramgen_cmd} {module_name}' )
         P(f'//' )
         S.cmd( f'{ramgen_cmd} {module_name}', echo=False, echo_stdout=False )
-
-def make_fifo( params, with_file_header=True ): 
-    m_name      = params['m_name']
-    wr          = params['wr']
-    rd          = params['rd']
-    is_async    = params['is_async']
-    wr_clk      = params['wr_clk']
-    wr_reset_   = params['wr_reset_']
-    rd_clk      = params['rd_clk']
-    rd_reset_   = params['rd_reset_']
-
-    module_header_begin( m_name, with_file_header=with_file_header )
-
-    input(  wr_clk,         1 )
-    input(  wr_reset_,      1 )
-    if is_async:
-        input( rd_clk,      1 )
-        input( rd_reset_,   1 )
-   
-    input(  f'{wr}_pvld',   1 )
-    output( f'{wr}_prdy',   1 )
-    input(  f'{wr}_pd',     params['w'] )
-    
-    output( f'{rd}_pvld',   1 )
-    input(  f'{rd}_prdy',   1 )
-    output( f'{rd}_pd',     params['w'] )
-    
-    module_header_end( no_warn_filename=True )
-
-    depth = params['depth']
-    if depth == 0:
-        P(f'assign {{{wr}_prdy,{rd}_pvld,{rd}_pd}} = {{{rd}_prdy,{wr}_pvld,{wr}_pd}};' )
-    elif depth == 1:
-        P()
-        P(f'// simple flop' )
-        P(f'//' )
-        reg( f'{rd}_pvld', 1 )
-        reg( f'{rd}_pd', params['w'] )
-        always_at_posedge( _clk=wr_clk )
-        P(f'    {rd}_pvld <= {wr}_pvld;' )
-        P(f'    if ( {wr}_pvld ) {rd}_pd <= {wr}_pd;' )
-        P(f'end' )
-    else:
-        w     = params['w']
-        a_w   = log2( depth )
-        cnt_w = a_w
-        cnt_w = (a_w+1) if (1 << a_w) >= depth else a_w
-        P(f'// flop ram' )
-        P(f'//' )
-        for i in range( depth ): reg( f'ram_ff{i}', w )
-        P()
-        P(f'// PUSH/POP' )
-        P(f'//' ) 
-        reg( f'cnt', cnt_w )
-        P(f'wire {wr}_pushing = {wr}_pvld && {wr}_prdy;' )
-        P(f'wire {rd}_popping = {rd}_pvld && {rd}_prdy;' )
-        always_at_posedge( _clk=wr_clk )
-        P(f'    if ( !{wr_reset_} ) begin' )
-        P(f'        cnt <= 0;' )
-        P(f'    end else if ( {wr}_pushing != {rd}_popping ) begin' )
-        P(f'        // {vlint_off_width}' )
-        P(f'        cnt <= cnt + {wr}_pushing - {rd}_popping;' )
-        P(f'        // {vlint_on_width}' )
-        P(f'    end' )
-        P(f'end' )
-        P()
-        P(f'// WRITE SIDE' )
-        P(f'//' ) 
-        reg( f'{wr}_adr', a_w )
-        P(f'assign {wr}_prdy = cnt != {depth} || {rd}_popping;' )
-        always_at_posedge( _clk=wr_clk )
-        P(f'    if ( !{wr_reset_} ) begin' )
-        P(f'        {wr}_adr <= 0;' )
-        P(f'    end else if ( {wr}_pushing ) begin' )
-        P(f'        // {vlint_off_caseincomplete}' )
-        P(f'        case( {wr}_adr )' )
-        for i in range( depth ): P(f'            {a_w}\'d{i}: ram_ff{i} <= {wr}_pd;' )
-        P(f'        endcase' )
-        P(f'        // {vlint_on_caseincomplete}' )
-        P()
-        P(f'        {wr}_adr <= ({wr}_adr == {depth-1}) ? 0 : ({wr}_adr+1);' )
-        P(f'    end' )
-        P(f'end' )
-        P()
-        P(f'// READ SIDE' )
-        P(f'//' )
-        reg( f'{rd}_adr', a_w )
-        always_at_posedge( _clk=rd_clk )
-        P(f'    if ( !{rd_reset_} ) begin' )
-        P(f'        {rd}_adr <= 0;' )
-        P(f'    end else if ( {rd}_popping ) begin' )
-        P(f'        {rd}_adr <= ({rd}_adr == {depth-1}) ? 0 : ({rd}_adr+1);' )
-        P(f'    end' )
-        P(f'end' )
-        P()
-        P(f'assign {rd}_pvld = cnt != 0;' )
-        P(f'reg [{w-1}:0] {rd}_pd_p;' )
-        P(f'assign {rd}_pd = {rd}_pd_p;' )
-        P(f'always @( * ) begin' )
-        P(f'    // {vlint_off_caseincomplete}' )
-        P(f'    case( {rd}_adr )' )
-        for i in range( depth ): P(f'        {a_w}\'d{i}: {rd}_pd_p = ram_ff{i};' )
-        P(f'        // VCS coverage off' )
-        P(f'        default: begin' )
-        P(f'            {rd}_pd_p = {w}\'d0;' )
-        P(f'            // synopsys translate_off' )
-        P(f'            {rd}_pd_p = {{{w}{{1\'bx}}}};' )
-        P(f'            // synopsys translate_on' )
-        P(f'            end' )
-        P(f'        // VCS coverage on' )
-        P(f'    endcase' )
-        P(f'    // {vlint_on_caseincomplete}' )
-        P(f'end' )
-    P()
-    P(f'endmodule // {m_name}' )
 
 #--------------------------------------------------------------------
 #--------------------------------------------------------------------
@@ -2046,76 +1848,6 @@ def tb_ram_read( ram_name, row, oname, sigs, do_decl=True ):
 
 def tb_ram_write( ram_name, row, iname, sigs, do_decl=True ):
     iface_combine( iname, f'{ram_name}[{row}]', sigs, do_decl )
-
-def make_fifo_tb( name, params, sigs, do_dprint=True ):
-    module_name = params['m_name']
-    wr          = params['wr']
-    rd          = params['rd']
-
-    P(f'// Testbench for {module_name}.v with the following properties beyond those of the fifo:' )
-    P(f'// - incrementing input data' )
-    P(f'// - randomly adds bubbles to write-side input' )
-    P(f'// - randomly stalls the read-side output' )
-    P(f'// - makes some assumptions that will need to be generalized later' )
-    P(f'//' )
-    module_header_begin( f'tb_{module_name}' )
-    module_header_end()
-    P()
-    tb_clk()
-    tb_reset_()
-    tb_dump( f'tb_{module_name}', include_saif=False )
-    P()
-    tb_rand_init()
-
-    iface_wire( wr, sigs, True, False )
-    inst_fifo( params, f'u_{name}', wr, rd, sigs, 'pvld', 'prdy', do_dprint=do_dprint )
-
-    P() 
-    P( f'// PLUSARGS' )
-    P( f'//' )
-    P( f'reg [31:0] wr_cnt_max;' )
-    P( f'initial begin' )
-    P( f'    if ( !$value$plusargs( "wr_cnt_max=%d", wr_cnt_max ) ) wr_cnt_max = 100;' )
-    P( f'end' )
-
-    P() 
-    P( f'// REQUESTS' )
-    P( f'//' )
-    reg( 'wr_cnt', 32 )
-    reg( 'rd_cnt', 32 )
-    tb_randbits( 'can_wr', 1 )
-    tb_randbits( 'can_rd', 1 )
-    reg( f'wr_dat', params['w'] )
-    reg( f'rd_dat', params['w'] ) # expected
-    P( f'assign {wr}_pvld = can_wr && wr_cnt < wr_cnt_max;' )
-    P( f'assign {wr}_dat  = wr_dat;' )
-    P( f'assign {rd}_prdy = can_rd;' )
-    P( f'wire fifo_idle = !{wr}_pvld && !{rd}_pvld;' )
-    always_at_posedge()
-    P( f'    if ( !{reset_} ) begin' )
-    P( f'        wr_cnt <= 0;' )
-    P( f'        rd_cnt <= 0;' )
-    P( f'        wr_dat <= 0;' )
-    P( f'        rd_dat <= 0;' )
-    P( f'    end else begin' )
-    P( f'        if ( {wr}_pvld && {wr}_prdy ) begin' )
-    P( f'            wr_dat <= wr_dat + 1;' )
-    P( f'            wr_cnt <= wr_cnt + 1;' )
-    P( f'        end' )
-    P( f'        if ( {rd}_pvld && {rd}_prdy ) begin' )
-    P( f'            rd_dat <= rd_dat + 1;' )
-    P( f'            rd_cnt <= rd_cnt + 1;' )
-    P( f'        end' )
-    P( f'        if ( fifo_idle && rd_cnt === wr_cnt_max ) begin' )
-    P( f'            $display( "PASS" );' )
-    P( f'            $finish;' )
-    P( f'        end' )
-    P( f'    end' )
-    P( f'end' )
-    dassert( f'{rd}_pvld === 0 || {rd}_dat === rd_dat', f'unexpected read data' )
-
-    P()
-    P(f'endmodule // tb_{module_name}' )
 
 def make_v( module_name ):
     pass

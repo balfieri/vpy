@@ -4,9 +4,10 @@ For now, you'll need to read the comments in V.py to see what is available.
 S.py is a Python module that has a few system helper functions unrelated to Verilog.
 
 There are also some higher-level generators and that sit above V.py. They generate designs 
-as well as corresponding testbenches. Specific functions are described down below.
+as well as corresponding testbenches. Specific functions and params are described down below.
 
-* cache.py - generates various types of caches and cache components
+* fifo.py - fifo generator
+* cache.py - cache generator
 
 # Examples
 
@@ -209,8 +210,6 @@ def resource_accounting( name, cnt, add_free_cnt=False, set_i_is_free_i=False )
 def rom_1d( i0, names, entries, nesting=0, result_w=None )
 def rom_2d( i0, i1, names, entries, nesting=0, result_w=None )
 def ram( iname, oname, sigs, depth, wr_cnt=1, rd_cnt=1, rw_cnt=0, clks=[], m_name='', u_name='', add_blank_line=True )
-def fifo( iname, oname, sigs, pvld, prdy, depth, m_name='', u_name='', with_wr_prdy=True )
-def fifop( params, iname, oname, sigs, pvld, prdy, u_name='', with_wr_prdy=True )
 ```
 
 ## Testbenches
@@ -228,21 +227,60 @@ def tb_ram_file( ram_name, file_name, sigs, is_hex_data=True )
 def tb_ram_read( ram_name, row, oname, sigs, do_decl=True )
 def tb_ram_write( ram_name, row, iname, sigs, do_decl=True )
 
-# entire testbench modules:
-def make_fifo_tb( name, params, sigs, do_dprint=True )
+# Generators
+
+By convention, each generator takes a set of parameters in the form of a Python dictionary. For each generator that follows, the required
+and optional params are described first.
+
+## fifo.py - fifo generator
+
+```python
+params = { # required always:
+           'd':                 <depth>,        # fifo depth of ram (does not include any in/out registering)
+
+           # optional for stage(), required for other functions:
+           'w':                 <width>,        # stage() derives it from sigs
+           'm_name':            <module_name>,  # stage() derives it from fifo params
+
+           # optional (default values are shown)
+           'is_async':          False,          # this must always be False for now
+           'wr_clk':            V.clk,
+           'wr_reset_':         V.reset_,
+           'wr':                'wr',           # write-side iface name
+           'rd_clk':            V.clk,
+           'rd_reset_':         V.reset_,
+           'rd':                'rd'            # read-side iface name
+           }
 ```
 
-# Higher-Level Generators
+This causes a fifo stage to get inserted inside the current module. In reality, a fifo module is instantiated at the current location, 
+then the fifo module itself will get generated at the end of the current module:
+
+```python
+def stage( params, iname, oname, sigs, pvld='pvld', prdy='prdy', inst_name='', with_wr_prdy=True )
+```
+
+These generate a fifo module or a corresponding testbench module, and should not be called from inside a module:
+
+```python
+def make( params )
+def make_tb( name, params )
+```
+
+This can be used to instantiate an existing fifo module (if it was generated using make()):
+
+```python
+```
 
 ## cache.py - cache generator
 
-Separable cache components:
+These are cache components that get inserted inside the current module. Normally, one does not use these directly:
 
 ```python
 def tags( name, addr_w, tag_cnt, req_cnt, ref_cnt_max, incr_ref_cnt_max=1, decr_req_cnt=0, can_always_alloc=False, custom_avails=False )
 ```
 
-Full cache module and testbench module:
+These generate a cache module or a corresponding testbench module, and should not be called from inside a module:
 
 ```python
 def make( params )
