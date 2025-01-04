@@ -10,7 +10,19 @@ import cache
 P = print
 
 def reinit():
-    pass
+    # I am confused about subword cnt from C.py
+    params = { # required:
+               'line_cnt':      2,              # number of lines
+               'assoc':         2,              # fully associative (one set)
+               'line_w':        32,             # width of line (dat)
+               'addr_w':        32,             # width of virtual byte address
+               'req_id_w':      3,              # width of req_id in request
+
+               # optional:
+               'req_cnt':       1,              # number of request interfaces
+               'subword_cnt':   1,              # number of subwords in dat
+               'mem_dat_w':     64,             # width of memory dat (default is line_w)
+             }
 
 def header( module_name ):
     P(f'// L0 read-only cache with the following properties:' )
