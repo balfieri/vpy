@@ -4,13 +4,18 @@
 #
 import S
 import V
-import C
-import math
 
 P = print
 
 def reinit():
-    pass
+    global arb_req_id_cnt, arb_req_id_w, xx2arb, arb2xx
+
+    # normally, this stuff would go in a C.py config file
+    arb_req_id_cnt            = 4
+    arb_req_id_w              = V.log2( arb_req_id_cnt )
+
+    xx2arb                    = { 'elig':               arb_req_id_cnt }
+    arb2xx                    = { 'req_id':             arb_req_id_w }
 
 def header( module_name ):
     P(f'// Round-robin arbiter with the following properties:' )
@@ -22,22 +27,22 @@ def header( module_name ):
     V.input( f'{V.clk}', 1 )
     V.input( f'{V.reset_}', 1 )
     V.output( f'arb_idle', 1 )
-    V.iface_input( f'xx2arb', C.xx2arb, False )
-    V.iface_output( f'arb2xx', C.arb2xx, False )
+    V.iface_input( f'xx2arb', xx2arb, False )
+    V.iface_output( f'arb2xx', arb2xx, False )
     V.module_header_end()
-    V.iface_dprint( f'xx2arb',               C.xx2arb,               f'xx2arb_pvld' )
-    V.iface_dprint( f'arb2xx',               C.arb2xx,               f'arb2xx_pvld' )
+    V.iface_dprint( f'xx2arb',               xx2arb,               f'xx2arb_pvld' )
+    V.iface_dprint( f'arb2xx',               arb2xx,               f'arb2xx_pvld' )
   
 def inst_arb_rr( module_name, inst_name, do_decls ):
     if do_decls: 
         V.wire( f'arb_idle', 1 )
-        V.iface_wire( f'xx2arb', C.xx2arb, True, False )
-        V.iface_wire( f'arb2xx', C.arb2xx, True, False )
+        V.iface_wire( f'xx2arb', xx2arb, True, False )
+        V.iface_wire( f'arb2xx', arb2xx, True, False )
     P()
     P(f'{module_name} {inst_name}(' ) 
     P(f'      .{V.clk}({V.clk}), .{V.reset_}({V.reset_}), .arb_idle(arb_idle)' )
-    V.iface_inst( f'xx2arb', f'xx2arb', C.xx2arb, True, False )
-    V.iface_inst( f'arb2xx', f'arb2xx', C.arb2xx, True, False )
+    V.iface_inst( f'xx2arb', f'xx2arb', xx2arb, True, False )
+    V.iface_inst( f'arb2xx', f'arb2xx', arb2xx, True, False )
     P(f'    );' )
 
 def make_arb_rr( module_name ):
@@ -46,7 +51,7 @@ def make_arb_rr( module_name ):
     P()
     P( f'// ARBITER' )
     P( f'//' )
-    V.choose_eligible( 'req_id_chosen', f'xx2arb_elig', C.arb_req_id_cnt, f'req_preferred', gen_preferred=True, adv_preferred='xx2arb_pvld' )
+    V.choose_eligible( 'req_id_chosen', f'xx2arb_elig', arb_req_id_cnt, f'req_preferred', gen_preferred=True, adv_preferred='xx2arb_pvld' )
     P( f'assign arb2xx_pvld = xx2arb_pvld;' )
     P( f'assign arb2xx_req_id = req_id_chosen;' )
 
@@ -86,11 +91,11 @@ def make_tb_arb_rr( name, module_name ):
     P( f'//' )
     V.reg( 'req_cnt', 32 )
     V.tb_randbits( 'can_issue_req', 1 )
-    V.tb_randbits( 'elig', C.arb_req_id_cnt )
+    V.tb_randbits( 'elig', arb_req_id_cnt )
     P( f'assign xx2arb_pvld = can_issue_req && |elig && req_cnt < req_cnt_max;' )
     P( f'assign xx2arb_elig = elig;' )
     V.reg( 'last_pvld', 1 )
-    V.reg( 'last_req_id', C.arb_req_id_w )
+    V.reg( 'last_req_id', arb_req_id_w )
     V.always_at_posedge()
     P( f'    if ( !{V.reset_} ) begin' )
     P( f'        req_cnt <= 0;' )
@@ -111,9 +116,9 @@ def make_tb_arb_rr( name, module_name ):
     P( f'end' )
     V.dassert( 'arb_idle === !xx2arb_pvld', 'idle iff iface idle' )
     V.dassert( 'xx2arb_pvld === arb2xx_pvld', 'interfaces should be in sync' )
-    V.binary_to_one_hot( 'arb2xx_req_id', C.arb_req_id_cnt, 'chosen_mask', f'({V.reset_} && arb2xx_pvld)' )
+    V.binary_to_one_hot( 'arb2xx_req_id', arb_req_id_cnt, 'chosen_mask', f'({V.reset_} && arb2xx_pvld)' )
     V.dassert( 'arb2xx_pvld === 0 || (xx2arb_elig & chosen_mask) !== 0', f'req chosen that was not eligible' )
-    V.binary_to_one_hot( f'last_req_id', C.arb_req_id_cnt, 'last_mask', f'({V.reset_} && last_pvld)' )
+    V.binary_to_one_hot( f'last_req_id', arb_req_id_cnt, 'last_mask', f'({V.reset_} && last_pvld)' )
     V.dassert( 'arb2xx_pvld === 0 || xx2arb_elig === chosen_mask || chosen_mask !== last_mask', f'arbiter did not choose fairly' )
 
     P()

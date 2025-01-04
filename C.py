@@ -8,27 +8,15 @@ import V
 P = print
 
 def reinit():
-    global arb_req_id_cnt, arb_req_id_w, xx2arb, arb2xx
-    global fifo_d, fifo_w, xx2fifo, fifo2xx
     global addr_w, mem_addr_w, mem_dat_w
     global l0c_slot_cnt, l0c_slot_id_w, l0c_line_w, l0c_req_id_w, l0c_req_id_cnt
     global l0c_addr_w, l0c_dat_w, l0c_ref_cnt_max, l0c_subword_w, l0c_subword_cnt, l0c_mem_tag_id_w
     global xx2l0c, l0c2xx_status, l0c2xx_dat, l0c2mem, mem2l0c
-    global l0c2xx_tags_status, xx2l0c_tags_fill_dat, xx2l0c_tags_hit_dat
     global l0c_tb_addr_cnt, l0c_tb_addr_id_w
 
     # VERILOG
     #
     V.reinit( 'lclk', 'lreset_', _ramgen_cmd='./bramgen' )
-
-    #-------------------------------------------------------
-    # Arbiter
-    #-------------------------------------------------------
-    arb_req_id_cnt            = 4
-    arb_req_id_w              = V.log2( arb_req_id_cnt )
-
-    xx2arb                    = { 'elig':               arb_req_id_cnt }
-    arb2xx                    = { 'req_id':             arb_req_id_w }
 
     #-------------------------------------------------------
     # L0
@@ -58,10 +46,6 @@ def reinit():
                                   'is_hit':             1,                      # returning data soon
                                   'is_miss':            1,
                                   'must_retry':         1 }                     # hit-under-miss or can't allocate -> punt to client
-    l0c2xx_tags_status        = l0c2xx_status.copy()                            # these next 4 are used by l0c_tags tags-only design
-    l0c2xx_tags_status['tag_i'] = l0c_slot_id_w                                 # TB needs the tag_i so it can issue these...
-    xx2l0c_tags_fill_dat      = { 'tag_i':              l0c_slot_id_w }         # so it can decr ref cnt and mark valid 
-    xx2l0c_tags_hit_dat       = { 'tag_i':              l0c_slot_id_w }         # so it can decr ref cnt
     l0c2xx_dat                = { 'req_id':             l0c_req_id_w,
                                   'dat':                l0c_dat_w }
 

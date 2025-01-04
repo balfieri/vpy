@@ -10,7 +10,6 @@ import C                        # config file
 import arb_rr                   # round-robin arbiter
 import fifo1                    # stallable fifo in flops
 import l0c                      # L0 cache
-import l0c_tags                 # L0 cache tags only
 
 if len( sys.argv ) != 2: S.die( 'usage: gen.py module_name' )
 

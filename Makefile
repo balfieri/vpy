@@ -38,7 +38,6 @@ MODULES=\
         arb_rr \
         fifo1 \
 	l0c \
-	l0c_tags \
 
 #------------------------------------------------------------------------------
 # The following rules shouldn't need to change.

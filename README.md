@@ -17,7 +17,6 @@ in foo.py, the generated files will be foo.v (design) and tb_foo.v (testbench):
 * arb_rr.py   - round-robin arbiter (combinational)
 * fifo1.py    - stallable fifo with ram in flops
 * l0c.py      - L0 read-only non-blocking cache with tags and data in flops 
-* l0c_tags.py - L0 read-only non-blocking cache with tags in flops (TB fakes fill part)
 
 To build all examples using the canonical Makefile and gen.py script, type:
 
@@ -294,10 +293,6 @@ def tags( name, addr_w, tag_cnt, req_cnt, ref_cnt_max, incr_ref_cnt_max=1, decr_
 # Things To Do
 
 * Merge guts of l0c.py into cache.py for start of general cache generator, then l0c.py and l0c_tags.py become simple wrappers
-* Test logN-based logic
-* Test integer and fixed-point math
-* Beef up fifos
-* Beef up cache.py generator
 * Add xbar.py generator
 * Add float.py generator
 
