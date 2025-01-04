@@ -271,6 +271,7 @@ def make_tb( name, params )
 This can be used to instantiate an existing fifo module (if it was generated using make()):
 
 ```python
+def inst( params, inst_name, iname, oname, sigs, pvld='pvld', prdy='prdy', with_wr_prdy=True, do_decl=True, do_dprint=False )
 ```
 
 ## cache.py - cache generator
