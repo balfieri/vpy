@@ -235,22 +235,23 @@ and optional params are described first.
 ## fifo.py - fifo generator
 
 ```python
-params = { # required always:
-           'd':                 <depth>,        # fifo depth of ram (does not include any in/out registering)
+params = { 
+    # required always:
+    'd':                 <depth>,        # fifo depth of ram (does not include any in/out registering)
 
-           # optional for stage(), required for other functions:
-           'w':                 <width>,        # stage() derives it from sigs
-           'm_name':            <module_name>,  # stage() derives it from fifo params
+    # optional for stage(), required for other functions:
+    'w':                 <width>,        # stage() derives it from sigs
+    'm_name':            <module_name>,  # stage() derives it from fifo params
 
-           # optional (default values are shown)
-           'is_async':          False,          # this must always be False for now
-           'wr_clk':            V.clk,
-           'wr_reset_':         V.reset_,
-           'wr':                'wr',           # write-side iface name
-           'rd_clk':            V.clk,
-           'rd_reset_':         V.reset_,
-           'rd':                'rd'            # read-side iface name
-           }
+    # optional (default values are shown)
+    'is_async':          False,          # this must always be False for now
+    'wr_clk':            V.clk,
+    'wr_reset_':         V.reset_,
+    'wr':                'wr',           # write-side iface name
+    'rd_clk':            V.clk,          
+    'rd_reset_':         V.reset_,
+    'rd':                'rd'            # read-side iface name
+    }
 ```
 
 This causes a fifo stage to get inserted inside the current module. In reality, a fifo module is instantiated at the current location, 

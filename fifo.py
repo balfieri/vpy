@@ -34,10 +34,10 @@ def check( params ):
     if 'w' not in params: S.die( 'fifo.make: w not specified' )
     if params['w'] < 1: S.die( 'fifo.make: w must be >= 1' )
 
-    if 'm_name' not in params: params['m_name'] = f'fifo_{d}x{w}'
+    if 'm_name' not in params: s.die( f'fifo.check: m_name is not specified' )
+
     if 'is_async' in params and params['is_async']: S.die( f'fifo.check: is_async=True is not currently allowed' )
     params['is_async'] = False
-
     if 'wr_clk' not in params: params['wr_clk'] = V.clk
     if 'rd_clk' not in params: params['rd_clk'] = V.clk
     if 'wr_reset_' not in params: params['wr_reset_'] = V.reset_
