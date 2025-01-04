@@ -215,7 +215,6 @@ def ram( iname, oname, sigs, depth, wr_cnt=1, rd_cnt=1, rw_cnt=0, clks=[], m_nam
 ## Testbenches
 
 ```python
-# testbench components:
 def tb_clk( decl_clk=True, default_cycles_max=2000, perf_op_first=100, perf_op_last=200 )
 def tb_reset_( decl_reset_=True )
 def tb_dump( module_name )
@@ -226,6 +225,7 @@ def tb_ram_decl( ram_name, d, sigs )
 def tb_ram_file( ram_name, file_name, sigs, is_hex_data=True )
 def tb_ram_read( ram_name, row, oname, sigs, do_decl=True )
 def tb_ram_write( ram_name, row, iname, sigs, do_decl=True )
+```
 
 # Generators
 
