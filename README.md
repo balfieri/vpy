@@ -48,6 +48,8 @@ import C                # conventional config file
 
 # S.py Functions
 
+These are system-level functions that do not involved Verilog.
+
 ```python
 def die( msg )
 def cmd( c, echo=True, echo_stdout=False, can_die=True )
@@ -59,6 +61,8 @@ def file_edit( file_name, edits, echo_edits=False , must_apply_all=True )
 ```
 
 # V.py Functions
+
+These are low-level functions involved with Verilog generation.
 
 ## Initialization
 
@@ -212,6 +216,7 @@ def fifop( params, iname, oname, sigs, pvld, prdy, u_name='', with_wr_prdy=True 
 ## Testbenches
 
 ```python
+# testbench components:
 def tb_clk( decl_clk=True, default_cycles_max=2000, perf_op_first=100, perf_op_last=200 )
 def tb_reset_( decl_reset_=True )
 def tb_dump( module_name )
@@ -222,28 +227,31 @@ def tb_ram_decl( ram_name, d, sigs )
 def tb_ram_file( ram_name, file_name, sigs, is_hex_data=True )
 def tb_ram_read( ram_name, row, oname, sigs, do_decl=True )
 def tb_ram_write( ram_name, row, iname, sigs, do_decl=True )
-def tb_fifo( name, params, sigs, do_dprint=True )
+
+# entire testbench modules:
+def make_fifo_tb( name, params, sigs, do_dprint=True )
 ```
 
-# cache.py - cache generator
+# Higher-Level Generators
+
+## cache.py - cache generator
 
 Separable cache components:
 
 ```python
 def tags( name, addr_w, tag_cnt, req_cnt, ref_cnt_max, incr_ref_cnt_max=1, decr_req_cnt=0, can_always_alloc=False, custom_avails=False )
-def filled_check( name, tag_i, r, tag_cnt, add_reg=True )
 ```
 
-Full cache generator:
+Full cache module and testbench module:
 
 ```python
-def make_cache( params )
-def tb_cache( name, params )
+def make( params )
+def make_tb( name, params )
 ```
 
 # Things To Do
 
-* Merge guts of l0c.py into cache.py for start of general cache generator
+* Merge guts of l0c.py into cache.py for start of general cache generator, then l0c.py and l0c_tags.py become simple wrappers
 * Test logN-based logic
 * Test integer and fixed-point math
 * Beef up fifos

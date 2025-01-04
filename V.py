@@ -2047,7 +2047,7 @@ def tb_ram_read( ram_name, row, oname, sigs, do_decl=True ):
 def tb_ram_write( ram_name, row, iname, sigs, do_decl=True ):
     iface_combine( iname, f'{ram_name}[{row}]', sigs, do_decl )
 
-def tb_fifo( name, params, sigs, do_dprint=True ):
+def make_fifo_tb( name, params, sigs, do_dprint=True ):
     module_name = params['m_name']
     wr          = params['wr']
     rd          = params['rd']

@@ -36,4 +36,4 @@ def make_fifo1( module_name ):
 
 def make_tb_fifo1( name, module_name ):
     params['m_name'] = module_name
-    V.tb_fifo( name, params, xx2fifo )
+    V.make_fifo_tb( name, params, xx2fifo )

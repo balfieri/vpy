@@ -188,11 +188,3 @@ def tags( name, addr_w, tag_cnt, req_cnt, ref_cnt_max, incr_ref_cnt_max=1, decr_
     for i in range(tag_cnt): idle += f' && {name}__ref_cnt{i} == 0'
     for r in range(req_cnt): idle += f' && !{name}_req{r}_pvld' 
     V.wirea( f'{name}_idle', 1, idle )
-
-#--------------------------------------------------------------------
-# Check that filling a cache tag that expects it.
-#--------------------------------------------------------------------
-def cache_filled_check( name, tag_i, r, tag_cnt, add_reg=True ):
-    V.mux_subword( r, 1, tag_i, f'{name}__filleds', tag_cnt, add_reg=add_reg )
-    
-
