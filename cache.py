@@ -27,6 +27,7 @@ import C # temporary
 P = print
 
 def check( params ):
+    # TODO: do this and also propagate values and names down below
     pass
 
 def inst( params, module_name, inst_name, do_decls ):
