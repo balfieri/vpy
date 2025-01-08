@@ -16,7 +16,7 @@ in foo.py, the generated files will be foo.v (design) and tb_foo.v (testbench):
 
 * arb_rr.py   - round-robin arbiter (combinational)
 * fifo1.py    - stallable fifo with ram in flops
-* l0c.py      - L0 read-only non-blocking cache with tags and data in flops 
+* cache1.py   - L0 read-only non-blocking cache with tags and data in flops 
 
 To build all examples using the canonical Makefile and gen.py script, type:
 
@@ -281,6 +281,26 @@ These generate a cache module or a corresponding testbench module, and should no
 ```python
 def make( params )
 def make_tb( name, params )
+```
+
+This can be used to instantiate an existing cache module (if it was generated using make()):
+
+```python
+def inst( params, inst_name, do_dprint=False )
+```
+
+Because caches involve a lot of interfaces, inst() returns a dictionary containing the declared interfaces, so it
+makes sense to call inst() before using any interfaces:
+
+```python
+inst_info = {
+    reqs = [...],               # request interfaces
+    statuses = [...],           # status interfaces (caches are non-blocking)
+    wdats = [...],              # write-data interfaces (for writeable caches)
+    rdats = [...],              # read-data interfaces
+    mem_reqs = [...],           # memory request interfaces (currently always one)
+    mem_rdats = [...],          # memory read-data interfaces (currently always one)
+}
 ```
 
 These are cache components that get inserted inside the current module. Normally, one does not use these directly, 

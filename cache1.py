@@ -18,7 +18,7 @@
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 # THE SOFTWARE.
 # 
-# l0c.py - simple L0 cache all in flops
+# cache1.py - simple L0 cache all in flops
 #
 import S
 import V
@@ -28,7 +28,25 @@ import cache
 P = print
 
 def reinit():
-    pass
+    # I am confused about subword cnt from C.py
+    params = { # required:
+               'is_read_only':  1,              # read-only cache
+               'line_cnt':      2,              # number of lines
+               'assoc':         2,              # fully associative (one set)
+               'line_w':        32,             # width of line (dat)
+               'addr_w':        32,             # width of virtual byte address
+               'req_id_w':      3,              # width of req_id in request
+
+               # optional:
+               'cache_name':    'l0c',          # short name used in interfaces
+               'req_name':      'xx',           # short name used in interfaces
+               'mem_name':      'mem',          # short name used in interfaces
+               'tag_ram_kind':  'ff',           # tag ram in flops
+               'data_ram_kind': 'ff',           # data ram in flops
+               'req_cnt':       1,              # number of request interfaces
+               'subword_cnt':   1,              # number of subwords in dat
+               'mem_dat_w':     64,             # width of memory dat (default is line_w)
+             }
 
 def header( module_name ):
     P(f'// L0 read-only cache with the following properties:' )
@@ -66,7 +84,7 @@ def header( module_name ):
     V.iface_dprint( f'l0c2mem', C.l0c2mem, f'l0c2mem_pvld', f'l0c2mem_prdy' )
     V.iface_dprint( f'mem2l0c', C.mem2l0c, f'mem2l0c_pvld' )
   
-def inst_l0c( module_name, inst_name, do_decls ):
+def inst_cache1( module_name, inst_name, do_decls ):
     if do_decls: 
         V.wire( f'l0c_idle', 1 )
         V.iface_wire( f'xx2l0c', C.xx2l0c, True, True )
@@ -84,7 +102,7 @@ def inst_l0c( module_name, inst_name, do_decls ):
     V.iface_inst( f'mem2l0c', f'mem2l0c', C.mem2l0c, True, False )
     P(f'    );' )
 
-def make_l0c( module_name ):
+def make_cache1( module_name ):
     header( module_name )
 
     P()
@@ -158,7 +176,7 @@ def make_l0c( module_name ):
 
     V.module_footer( module_name )
 
-def make_tb_l0c( name, module_name ):
+def make_tb_cache1( name, module_name ):
     P(f'// Testbench for {module_name}.v with the following properties beyond those of the cache:' )
     P(f'// - issues a plusarg-selectable number of requests (default: 100)' )
     P(f'// - randomly selects an address from {C.l0c_tb_addr_cnt} possible random addresses (to induce hits)' )
@@ -176,7 +194,7 @@ def make_tb_l0c( name, module_name ):
     P()
     V.tb_rand_init()
 
-    inst_l0c( module_name, f'u_{name}', True )
+    inst_cache1( module_name, f'u_{name}', True )
 
     P() 
     P( f'// PLUSARGS' )
