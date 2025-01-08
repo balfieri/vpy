@@ -58,7 +58,6 @@ MODULES=\
         arb_rr \
         fifo1 \
         cache1 \
-	l0c \
 
 #------------------------------------------------------------------------------
 # The following rules shouldn't need to change.

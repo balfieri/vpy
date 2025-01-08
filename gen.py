@@ -30,7 +30,6 @@ import C                        # config file
 import arb_rr                   # round-robin arbiter
 import fifo1                    # stallable fifo in flops
 import cache1                   # simple L0 cache in flops
-import l0c                      # L0 cache
 
 if len( sys.argv ) != 2: S.die( 'usage: gen.py module_name' )
 
@@ -45,7 +44,6 @@ builder = None
 if m_lc == 'arb_rr':                    builder = arb_rr
 if m_lc == 'fifo1':                     builder = fifo1
 if m_lc == 'cache1':                    builder = cache1
-if m_lc == 'l0c':                       builder = l0c
 if not builder: S.die( f'unknown design: {m_lc}' )
 
 builder.reinit()
