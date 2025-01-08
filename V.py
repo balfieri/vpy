@@ -1575,7 +1575,7 @@ def module_footer( mn ):
     P(f'endmodule // {mn}' )
     global rams, post_modules
     for ram  in rams:  make_ram( ram )
-    for post in post_modules: post['generator']( post['params'], with_file_header=False )
+    for post in post_modules: post['generator']( post['params'], post, with_file_header=False )
     rams = {}
     post_modules = {}
 

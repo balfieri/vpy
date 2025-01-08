@@ -78,7 +78,7 @@ def make_arb_rr( module_name ):
 
     V.module_footer( module_name )
 
-def make_tb_arb_rr( name, module_name ):
+def make_tb_arb_rr( module_name, inst_name ):
     P(f'// Testbench for {module_name}.v with the following properties beyond those of the arbiter:' )
     P(f'// - issues a plusarg-selectable number of requests (default: 100)' )
     P(f'// - randomly chooses the eligibility mask' )
@@ -94,7 +94,7 @@ def make_tb_arb_rr( name, module_name ):
     P()
     V.tb_rand_init()
 
-    inst_arb_rr( module_name, f'u_{name}', True )
+    inst_arb_rr( module_name, f'u_{inst_name}', True )
 
     P() 
     P( f'// PLUSARGS' )

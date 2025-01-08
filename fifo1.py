@@ -39,13 +39,10 @@ def reinit():
                'rd':            'fifo2xx' }
 
 def inst_fifo1( module_name, inst_name, do_decls=True ):
-    params['m_name'] = module_name
-    fifo.inst( params, inst_name, 'xx2fifo', 'fifo2xx', xx2fifo, with_wr_prdy=True, do_decl=do_decls )
+    fifo.inst( params, module_name, inst_name, 'xx2fifo', 'fifo2xx', xx2fifo, with_wr_prdy=True, do_decl=do_decls )
 
 def make_fifo1( module_name ):
-    params['m_name'] = module_name
-    fifo.make( params )
+    fifo.make( params, module_name )
 
-def make_tb_fifo1( name, module_name ):
-    params['m_name'] = module_name
-    fifo.make_tb( name, params, xx2fifo )
+def make_tb_fifo1( module_name, inst_name ):
+    fifo.make_tb( params, module_name, inst_name, xx2fifo )

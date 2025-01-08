@@ -34,8 +34,6 @@ def check( params ):
     if 'w' not in params: S.die( 'fifo.make: w not specified' )
     if params['w'] < 1: S.die( 'fifo.make: w must be >= 1' )
 
-    if 'm_name' not in params: s.die( f'fifo.check: m_name is not specified' )
-
     if 'is_async' in params and params['is_async']: S.die( f'fifo.check: is_async=True is not currently allowed' )
     params['is_async'] = False
     if 'wr_clk' not in params: params['wr_clk'] = V.clk
@@ -49,28 +47,28 @@ def check( params ):
 #--------------------------------------------------------------------
 # Instantiates a fifo inline and arranges with V.py to have it generated during module_footer().
 #--------------------------------------------------------------------
-def stage( params, iname, oname, sigs, pvld='pvld', prdy='prdy', inst_name='', with_wr_prdy=True, do_decl=True ):
+def stage( params, iname, oname, sigs, pvld='pvld', prdy='prdy', module_name='', inst_name='', with_wr_prdy=True, do_decl=True ):
     w = V.iface_width( sigs )
     if 'w' in params and params['w'] != w: S.die( f'fifo.stage: width w does not match expected sigs width of {w}' )
     params['w'] = w
 
-    if 'm_name' not in params: params['m_name'] = f'{V.module_name}_fifo_{d}x{w}'
+    if 'module_name' == '': module_name = f'{V.module_name}_fifo_{d}x{w}'
     if 'wr' not in params and iname != '': params['wr'] = iname
     if 'rd' not in params and oname != '': params['rd'] = oname
 
     check( params )
 
-    if inst_name == '': inst_name = 'u_' + params['m_name']
+    if inst_name == '': inst_name = 'u_' + module_name
 
-    inst_fifo( fifos[m_name], inst_name, iname, oname, sigs, pvld, prdy, with_wr_prdy=with_wr_prdy, do_decl=do_decl )
+    inst( params, inst_name, iname, oname, sigs, pvld, prdy, with_wr_prdy=with_wr_prdy, do_decl=do_decl )
 
     # add a callback to make() below to get the fifo generated during module_footer()
-    V.post_modules[m_name] = { 'generator': make, 'params': params.copy() }
+    V.post_modules[module_name] = { 'generator': make, 'params': params.copy() }
 
 #--------------------------------------------------------------------
 # Instantiates a fifo that is known to exist
 #--------------------------------------------------------------------
-def inst( params, inst_name, iname, oname, sigs, pvld='pvld', prdy='prdy', with_wr_prdy=True, do_decl=True, do_dprint=False ):
+def inst( params, module_name, inst_name, iname, oname, sigs, pvld='pvld', prdy='prdy', with_wr_prdy=True, do_decl=True, do_dprint=False ):
     P()
     names = ', '.join( sigs.keys() )
     d = params['d']
@@ -97,10 +95,9 @@ def inst( params, inst_name, iname, oname, sigs, pvld='pvld', prdy='prdy', with_
         ins  += f'{iname}_{sig}'
         outs += f'{oname}_{sig}'
     
-    m_name    = params['m_name']
     wr_clk    = params['wr_clk']
     wr_reset_ = params['wr_reset_']
-    P(f'{m_name} {inst_name}( .{wr_clk}({wr_clk}), .{wr_reset_}({wr_reset_}),' )
+    P(f'{module_name} {inst_name}( .{wr_clk}({wr_clk}), .{wr_reset_}({wr_reset_}),' )
     if params['is_async']:
         rd_clk    = params['rd_clk']
         rd_reset_ = params['rd_reset_']
@@ -116,10 +113,9 @@ def inst( params, inst_name, iname, oname, sigs, pvld='pvld', prdy='prdy', with_
 #--------------------------------------------------------------------
 # Generates a full fifo module.
 #--------------------------------------------------------------------
-def make( params, with_file_header=True ): 
+def make( params, module_name, with_file_header=True ): 
     check( params )
 
-    m_name      = params['m_name']
     wr          = params['wr']
     rd          = params['rd']
     is_async    = params['is_async']
@@ -128,7 +124,7 @@ def make( params, with_file_header=True ):
     rd_clk      = params['rd_clk']
     rd_reset_   = params['rd_reset_']
 
-    V.module_header_begin( m_name, with_file_header=with_file_header )
+    V.module_header_begin( module_name, with_file_header=with_file_header )
 
     V.input(  wr_clk,         1 )
     V.input(  wr_reset_,      1 )
@@ -231,15 +227,14 @@ def make( params, with_file_header=True ):
         P(f'    // {V.vlint_on_caseincomplete}' )
         P(f'end' )
     P()
-    P(f'endmodule // {m_name}' )
+    P(f'endmodule // {module_name}' )
 
 #--------------------------------------------------------------------
 # Generates a testbench module for a fifo module.
 #--------------------------------------------------------------------
-def make_tb( name, params, sigs, do_dprint=True ):
+def make_tb( params, module_name, inst_name, sigs, do_dprint=True ):
     check( params )
 
-    module_name = params['m_name']
     wr_reset_   = params['wr_reset_']
     wr          = params['wr']
     rd          = params['rd']
@@ -260,7 +255,7 @@ def make_tb( name, params, sigs, do_dprint=True ):
     V.tb_rand_init()
 
     V.iface_wire( wr, sigs, True, False )
-    inst( params, f'u_{name}', wr, rd, sigs, do_dprint=do_dprint )
+    inst( params, module_name, f'u_{inst_name}', wr, rd, sigs, do_dprint=do_dprint )
 
     P() 
     P( f'// PLUSARGS' )
