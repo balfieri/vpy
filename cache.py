@@ -59,8 +59,8 @@ def check( p ):
     # derived:
     p['line_id_w']            = V.log2( p['line_cnt'] )
     p['dat_w']                = p['line_w']                                # add req_subword_cnt at some point
-    p['mem_subword_cnt']      = int( p['mem_subword_w'] / p['line_w'] )
     p['mem_subword_w']        = V.log2( p['mem_subword_cnt'] )
+    p['mem_subword_cnt']      = int( p['mem_subword_w'] / p['line_w'] )
     p['mem_tag_id_w']         = p['req_id_w'] + p['mem_subword_w'] + p['line_id_w'] 
     p['mem_addr_w']           = p['req_addr_w'] - p['mem_subword_w']
     p['req2cache']            = { 'id':                 p['req_id_w'],
@@ -116,7 +116,7 @@ def make( p, module_name ):
     V.wirea( f'tags_fill_pvld', 1, f'mem2l0c_d_pvld' )
     V.wirea( f'tags_fill_tag_i', C.l0c_slot_id_w, f'mem2l0c_d_tag_id[{C.l0c_slot_id_w-1}:0]' )
     V.wirea( f'tags_fill_subword_i', C.l0c_subword_w, f'mem2l0c_d_tag_id[{C.l0c_subword_w+C.l0c_slot_id_w-1}:{C.l0c_slot_id_w}]' )
-    V.wirea( f'tags_fill_req_id', C.l0c_req_id_w, f'mem2l0c_d_tag_id[{C.l0c_mem_tag_id_w-1}:{C.l0c_subword_w+C.l0c_slot_id_w}]' )
+    V.wirea( f'tags_fill_id', C.l0c_req_id_w, f'mem2l0c_d_tag_id[{C.l0c_mem_tag_id_w-1}:{C.l0c_subword_w+C.l0c_slot_id_w}]' )
     V.mux_subword( f'tags_fill_dat', C.l0c_dat_w, f'tags_fill_subword_i', f'mem2l0c_d_dat', C.mem_dat_w )
 
     tags( f'tags', C.l0c_addr_w, C.l0c_slot_cnt, 1, C.l0c_ref_cnt_max )
@@ -128,7 +128,7 @@ def make( p, module_name ):
     V.always_at_posedge()
     P( f'    l0c2xx_status_pvld <= tags_req0_pvld;' )
     P( f'    if ( tags_req0_pvld ) begin' )
-    P( f'        l0c2xx_status_req_id <= xx2l0c_d_req_id;' )
+    P( f'        l0c2xx_status_id <= xx2l0c_d_id;' )
     P( f'        l0c2xx_status_is_hit <= tags_req0_status == TAGS_HIT;' )
     P( f'        l0c2xx_status_is_miss <= tags_req0_status == TAGS_MISS;' )
     P( f'        l0c2xx_status_must_retry <= tags_req0_status == TAGS_HIT_BEING_FILLED || tags_req0_status == TAGS_MISS_CANT_ALLOC;' )
@@ -149,7 +149,7 @@ def make( p, module_name ):
     P( f'assign l0c2mem_p_pvld = tags_req0_pvld && tags_req0_status == TAGS_MISS;' )
     P( f'assign l0c2mem_p_addr = tags_req0_addr[{C.l0c_addr_w-1}:{C.l0c_subword_w}];' )
     V.wirea( f'l0c2mem_p_subword_i', C.l0c_subword_w, f'tags_req0_addr[{C.l0c_subword_w-1}:0]' )
-    P( f'assign l0c2mem_p_tag_id = {{xx2l0c_d_req_id, l0c2mem_p_subword_i, tags__alloc_avail_chosen_i}};' )
+    P( f'assign l0c2mem_p_tag_id = {{xx2l0c_d_id, l0c2mem_p_subword_i, tags__alloc_avail_chosen_i}};' )
 
     P()
     P( f'// RETURNED DATA' )
@@ -163,7 +163,7 @@ def make( p, module_name ):
     V.always_at_posedge()
     P( f'    l0c2xx_dat_pvld <= l0c2xx_dat_pvld_p;' )
     P( f'    if ( l0c2xx_dat_pvld_p ) begin' )
-    P( f'        l0c2xx_dat_req_id <= tags_fill_pvld ? tags_fill_req_id : xx2l0c_d_req_id;' )
+    P( f'        l0c2xx_dat_id <= tags_fill_pvld ? tags_fill_id : xx2l0c_d_id;' )
     P( f'        l0c2xx_dat_dat <= tags_fill_pvld ? tags_fill_dat : l0c_hit_dat;' )
     P( f'    end' )
     P( f'end' )
@@ -418,7 +418,7 @@ def make_tb( p, module_name, inst_name ):
     V.iface_reg( f'xx2l0c_p', C.xx2l0c, True, False )
     P( f'wire   xx2l0c_p_prdy = xx2l0c_prdy;' )
     P( f'assign xx2l0c_pvld = xx2l0c_p_pvld;' )
-    P( f'assign xx2l0c_req_id = xx2l0c_p_req_id;' )
+    P( f'assign xx2l0c_id = xx2l0c_p_id;' )
     P( f'assign xx2l0c_addr = xx2l0c_p_addr;' )
     V.reg( 'req_cnt', 32 )
     V.wirea( 'req_elig', C.l0c_req_id_cnt, f'~req_in_use_mask' )
@@ -427,12 +427,12 @@ def make_tb( p, module_name, inst_name ):
     V.wirea( 'can_issue_req', 1, f'req_cnt < req_cnt_max && !should_delay_req && (!xx2l0c_p_pvld || xx2l0c_p_prdy)' )
     V.choose_eligible( 'req_id_chosen', f'req_elig', C.l0c_req_id_cnt, f'req_preferred', gen_preferred=True, adv_preferred='can_issue_req' )
     P( f'// {V.vlint_off_width}' )
-    V.binary_to_one_hot( 'req_id_chosen',        C.l0c_req_id_cnt, 'req_issued_mask',            f'({V.reset_} && can_issue_req && req_elig_any_vld)' )
-    V.binary_to_one_hot( 'l0c2xx_status_req_id', C.l0c_req_id_cnt, 'req_status_mask',            f'l0c2xx_status_pvld' )
-    V.binary_to_one_hot( 'l0c2xx_status_req_id', C.l0c_req_id_cnt, 'req_status_is_hit_mask',     f'l0c2xx_status_pvld && l0c2xx_status_is_hit' )
-    V.binary_to_one_hot( 'l0c2xx_status_req_id', C.l0c_req_id_cnt, 'req_status_is_miss_mask',    f'l0c2xx_status_pvld && l0c2xx_status_is_miss' )
-    V.binary_to_one_hot( 'l0c2xx_status_req_id', C.l0c_req_id_cnt, 'req_status_must_retry_mask', f'l0c2xx_status_pvld && l0c2xx_status_must_retry' )
-    V.binary_to_one_hot( 'l0c2xx_dat_req_id',    C.l0c_req_id_cnt, 'rdat_mask',                  f'l0c2xx_dat_pvld' )
+    V.binary_to_one_hot( 'req_id_chosen',    C.l0c_req_id_cnt, 'req_issued_mask',            f'({V.reset_} && can_issue_req && req_elig_any_vld)' )
+    V.binary_to_one_hot( 'l0c2xx_status_id', C.l0c_req_id_cnt, 'req_status_mask',            f'l0c2xx_status_pvld' )
+    V.binary_to_one_hot( 'l0c2xx_status_id', C.l0c_req_id_cnt, 'req_status_is_hit_mask',     f'l0c2xx_status_pvld && l0c2xx_status_is_hit' )
+    V.binary_to_one_hot( 'l0c2xx_status_id', C.l0c_req_id_cnt, 'req_status_is_miss_mask',    f'l0c2xx_status_pvld && l0c2xx_status_is_miss' )
+    V.binary_to_one_hot( 'l0c2xx_status_id', C.l0c_req_id_cnt, 'req_status_must_retry_mask', f'l0c2xx_status_pvld && l0c2xx_status_must_retry' )
+    V.binary_to_one_hot( 'l0c2xx_dat_id',    C.l0c_req_id_cnt, 'rdat_mask',                  f'l0c2xx_dat_pvld' )
     P( f'// {V.vlint_on_width}' )
     V.tb_randbits( 'req_addr_i', C.l0c_tb_addr_id_w )
     V.muxa( 'req_addr', C.l0c_addr_w, 'req_addr_i', addrs )
@@ -445,7 +445,7 @@ def make_tb( p, module_name, inst_name ):
     P( f'    end else begin' )
     P( f'        if ( can_issue_req && req_elig_any_vld ) begin' )
     P( f'            xx2l0c_p_pvld <= 1;' )
-    P( f'            xx2l0c_p_req_id <= req_id_chosen;' )
+    P( f'            xx2l0c_p_id <= req_id_chosen;' )
     P( f'            xx2l0c_p_addr <= req_addr;' )
     P( f'            req_cnt <= req_cnt + 1;' )
     for i in range(C.l0c_req_id_cnt):
@@ -470,7 +470,7 @@ def make_tb( p, module_name, inst_name ):
     V.dassert( '(req_status_is_hit_mask & rdat_mask) === req_status_is_hit_mask', 'is_hit with no data' )
     V.dassert( '(req_status_is_miss_mask & rdat_mask) === 0', 'is_miss with data at same time' )
     V.dassert( '(rdat_mask & req_in_use_mask) === rdat_mask', 'dat returned for req not outstanding' )
-    V.muxa( 'rdat_req_addr_i', C.l0c_tb_addr_id_w, 'l0c2xx_dat_req_id', req_addr_is )
+    V.muxa( 'rdat_req_addr_i', C.l0c_tb_addr_id_w, 'l0c2xx_dat_id', req_addr_is )
     V.muxa( 'rdat_dat_expected', C.l0c_dat_w, 'rdat_req_addr_i', dats_expected )
     V.dassert( '!l0c2xx_dat_pvld || (l0c2xx_dat_dat === rdat_dat_expected)', 'unexpected dat returned' )
 

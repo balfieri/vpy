@@ -59,14 +59,14 @@ def reinit():
     l0c_tb_addr_cnt           = l0c_req_id_cnt >> 1
     l0c_tb_addr_id_w          = V.log2( l0c_tb_addr_cnt )
 
-    xx2l0c                    = { 'req_id':             l0c_req_id_w,
+    xx2l0c                    = { 'id':                 l0c_req_id_w,
                                   'addr':               l0c_addr_w }
 
-    l0c2xx_status             = { 'req_id':             l0c_req_id_w,
+    l0c2xx_status             = { 'id':                 l0c_req_id_w,
                                   'is_hit':             1,                      # returning data soon
                                   'is_miss':            1,
                                   'must_retry':         1 }                     # hit-under-miss or can't allocate -> punt to client
-    l0c2xx_dat                = { 'req_id':             l0c_req_id_w,
+    l0c2xx_dat                = { 'id':                 l0c_req_id_w,
                                   'dat':                l0c_dat_w }
 
     l0c2mem                   = { 'tag_id':             l0c_mem_tag_id_w,
