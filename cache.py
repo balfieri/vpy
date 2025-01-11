@@ -26,12 +26,64 @@ import C # temporary
 
 P = print
 
-def check( params ):
-    # TODO: do this and also propagate values and names down below
-    pass
+def check( p ):
+    if 'line_cnt' not in p: S.die( f'cache: line_cnt must be specified' )
+    if p['line_cnt'] < 1: S.die( f'cache: line_cnt({line_cnt}) must be >= 1' )
+    if 'assoc' not in p:    S.die( f'cache: assoc must be specified' )
+    if p['assoc'] < 1 or p['assoc'] > p['line_cnt']: S.die( f'cache: assoc must be >= 1 and <= line_cnt' )
+    if p['assoc'] != p['line_cnt']: S.die( f'cache: for now, cache must be fully-associative (assoc==line_cnt)')
+    if 'line_w' not in p:   S.die( f'cache: line_w must be specified' )
+    if p['line_w'] < 1: S.die( f'cache: line_w({line_w}) must be >= 1' )
+    if 'req_id_w' not in p: S.die( f'cache: req_id_w must be specified' )
+    if p['req_id_w'] < 1: S.die( f'cache: req_id_w({req_id_w} must be >= 1' )
+    if 'req_addr_w' not in p:   S.die( f'cache: req_addr_w must be specified' )
+    if p['req_addr_w'] < 1: S.die( f'cache: req_addr_w({req_addr_w} must be >= 1' )
 
-def inst( params, module_name, inst_name, do_decls ):
-    check( params )
+    if 'is_read_only' not in p: p['is_read_only'] = False
+    if not p['is_read_only']: S.die( f'cache: for now, is_read_only must be True' )
+    if 'cache_name' not in p: p['cache_name'] = 'cache'
+    if 'req_name' not in p: p['req_name'] = 'req'
+    if 'mem_name' not in p: p['mem_name'] = 'mem'
+    if 'tag_ram_kind' not in p: 
+        if p['assoc'] == p['line_cnt']:
+            p['tag_ram_kind'] = 'ff'
+        else:
+            p['tag_ram_kind'] = 'ra2'
+    if 'data_ram_kind' not in p: p['data_ram_kind'] = 'ff'
+    if p['data_ram_kind'] != 'ff': S.die( f'cache: for now, data_ram_kind must be ff' )
+    if 'req_cnt' not in 'p': p['req_cnt'] = 1
+    if 'mem_dat_w' not in 'p': p['mem_dat_w'] = p['line_w']
+    if p['mem_dat_w'] < p['line_w']: S.die( f'cache: mem_dat_w must be >= line_w' )
+    if p['mem_dat_w'] % p['line_w'] != 0: S.die( f'cache: mem_dat_w must be a multiple of line_w' )
+
+    # derived:
+    p['line_id_w']            = V.log2( p['line_cnt'] )
+    p['dat_w']                = p['line_w']                                # add req_subword_cnt at some point
+    p['mem_subword_cnt']      = int( p['mem_subword_w'] / p['line_w'] )
+    p['mem_subword_w']        = V.log2( p['mem_subword_cnt'] )
+    p['mem_tag_id_w']         = p['req_id_w'] + p['mem_subword_w'] + p['line_id_w'] 
+    p['mem_addr_w']           = p['req_addr_w'] - p['mem_subword_w']
+    p['req2cache']            = { 'id':                 p['req_id_w'],
+                                  'addr':               p['req_addr_w'] }
+
+    p['cache2req_status']     = { 'id':                 p['req_id_w'],
+                                  'is_hit':             1,                      # returning data soon
+                                  'is_miss':            1,
+                                  'must_retry':         1 }                     # hit-under-miss or can't allocate -> punt to client
+    p['cache2req_dat']        = { 'id':                 p['req_id_w'],
+                                  'dat':                p['dat_w'] }
+
+    p['cache2mem']            = { 'tag_id':             p['mem_tag_id_w'],
+                                  'addr':               p['mem_addr_w'] }
+
+    p['mem2cache']            = { 'tag_id':             p['mem_tag_id_w'],
+                                  'dat':                p['mem_dat_w'] }
+
+def inst( p, module_name, inst_name, do_decls ):
+    check( p )
+    cache = p['cache_name']
+    req = p['req_name']
+
     if do_decls: 
         V.wire( f'l0c_idle', 1 )
         V.iface_wire( f'xx2l0c', C.xx2l0c, True, True )
@@ -49,9 +101,9 @@ def inst( params, module_name, inst_name, do_decls ):
     V.iface_inst( f'mem2l0c', f'mem2l0c', C.mem2l0c, True, False )
     P(f'    );' )
 
-def make( params, module_name ):
-    check( params )
-    header( params, module_name )
+def make( p, module_name ):
+    check( p )
+    header( p, module_name )
 
     P()
     P( f'// TAGS INPUTS' )
@@ -127,7 +179,7 @@ def make( params, module_name ):
 #--------------------------------------------------------------------
 # Generate cache module header
 #--------------------------------------------------------------------
-def header( params, module_name ):
+def header( p, module_name ):
     V.module_header_begin( module_name )
     V.input( f'{V.clk}', 1 )
     V.input( f'{V.reset_}', 1 )
@@ -317,7 +369,7 @@ def tags( name, addr_w, tag_cnt, req_cnt, ref_cnt_max, incr_ref_cnt_max=1, decr_
 #--------------------------------------------------------------------
 # Generate cache testbench
 #--------------------------------------------------------------------
-def make_tb( params, module_name, inst_name ):
+def make_tb( p, module_name, inst_name ):
     P(f'// Testbench for {module_name}.v with the following properties beyond those of the cache:' )
     P(f'// - issues a plusarg-selectable number of requests (default: 100)' )
     P(f'// - randomly selects an address from {C.l0c_tb_addr_cnt} possible random addresses (to induce hits)' )
@@ -335,7 +387,7 @@ def make_tb( params, module_name, inst_name ):
     P()
     V.tb_rand_init()
 
-    inst( params, module_name, f'u_{inst_name}', True )
+    inst( p, module_name, f'u_{inst_name}', True )
 
     P() 
     P( f'// PLUSARGS' )
