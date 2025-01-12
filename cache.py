@@ -56,9 +56,11 @@ def check( p ):
     if 'mem_dat_w' not in p: p['mem_dat_w'] = p['line_w']
     if p['mem_dat_w'] < p['line_w']: S.die( f'cache: mem_dat_w must be >= line_w' )
     if p['mem_dat_w'] % p['line_w'] != 0: S.die( f'cache: mem_dat_w must be a multiple of line_w' )
+    if 'tb_addr_cnt' not in p: p['tb_addr_cnt'] = 1 << (p['req_id_w']-1)
 
     # derived:
     p['line_id_w']            = V.log2( p['line_cnt'] )
+    p['req_id_cnt']           = 1 << p['req_id_w'] 
     if 'ref_cnt_max' not in p: p['ref_cnt_max'] = 1
     if p['ref_cnt_max'] < 1: S.die( 'cache: ref_cnt_max must be >= 1' )
     p['dat_w']                = p['line_w']                                # add req_subword_cnt at some point
@@ -66,6 +68,8 @@ def check( p ):
     p['mem_subword_w']        = V.log2( p['mem_subword_cnt'] )
     p['mem_tag_id_w']         = p['req_id_w'] + p['mem_subword_w'] + p['line_id_w'] 
     p['mem_addr_w']           = p['req_addr_w'] - p['mem_subword_w']
+    p['tb_addr_id_w']         = V.log2( p['tb_addr_cnt'] )
+
     p['unit2cache']           = { 'id':                 p['req_id_w'],
                                   'addr':               p['req_addr_w'] }
 
@@ -132,71 +136,71 @@ def make( p, module_name ):
     P()
     P( f'// TAGS INPUTS' )
     P( f'//' )
-    P( f'assign xx2l0c_d_prdy = l0c2mem_p_prdy && !mem2l0c_d_pvld;' )
-    V.wirea( f'tags_req0_pvld', 1, f'xx2l0c_d_pvld && xx2l0c_d_prdy' )
-    V.wirea( f'tags_req0_addr', p['req_addr_w'], f'xx2l0c_d_addr' )
+    P( f'assign {u2c}_d_prdy = {c2m}_p_prdy && !{m2c}_d_pvld;' )
+    V.wirea( f'tags_req0_pvld', 1, f'{u2c}_d_pvld && {u2c}_d_prdy' )
+    V.wirea( f'tags_req0_addr', p['req_addr_w'], f'{u2c}_d_addr' )
     V.wire( f'tags_decr0_pvld', 1 )
     V.wire( f'tags_decr0_tag_i', line_id_w )
-    V.wirea( f'tags_fill_pvld', 1, f'mem2l0c_d_pvld' )
-    V.wirea( f'tags_fill_tag_i', line_id_w, f'mem2l0c_d_tag_id[{line_id_w-1}:0]' )
-    V.wirea( f'tags_fill_subword_i', mem_subword_w, f'mem2l0c_d_tag_id[{mem_subword_w+line_id_w-1}:{line_id_w}]' )
-    V.wirea( f'tags_fill_id', p['req_id_w'], f'mem2l0c_d_tag_id[{mem_tag_id_w-1}:{mem_subword_w+line_id_w}]' )
-    V.mux_subword( f'tags_fill_dat', p['dat_w'], f'tags_fill_subword_i', f'mem2l0c_d_dat', p['mem_dat_w'] )
+    V.wirea( f'tags_fill_pvld', 1, f'{m2c}_d_pvld' )
+    V.wirea( f'tags_fill_tag_i', line_id_w, f'{m2c}_d_tag_id[{line_id_w-1}:0]' )
+    V.wirea( f'tags_fill_subword_i', mem_subword_w, f'{m2c}_d_tag_id[{mem_subword_w+line_id_w-1}:{line_id_w}]' )
+    V.wirea( f'tags_fill_id', p['req_id_w'], f'{m2c}_d_tag_id[{mem_tag_id_w-1}:{mem_subword_w+line_id_w}]' )
+    V.mux_subword( f'tags_fill_dat', p['dat_w'], f'tags_fill_subword_i', f'{m2c}_d_dat', p['mem_dat_w'] )
 
     tags( f'tags', p['req_addr_w'], p['line_cnt'], 1, p['ref_cnt_max'] )
 
     P()
     P( f'// TAGS STATUS' )
     P( f'//' )
-    V.iface_reg( f'l0c2xx_status', p['cache2unit_status'], True, False )
+    V.iface_reg( f'{c2u}_status', p['cache2unit_status'], True, False )
     V.always_at_posedge()
-    P( f'    l0c2xx_status_pvld <= tags_req0_pvld;' )
+    P( f'    {c2u}_status_pvld <= tags_req0_pvld;' )
     P( f'    if ( tags_req0_pvld ) begin' )
-    P( f'        l0c2xx_status_id <= xx2l0c_d_id;' )
-    P( f'        l0c2xx_status_is_hit <= tags_req0_status == TAGS_HIT;' )
-    P( f'        l0c2xx_status_is_miss <= tags_req0_status == TAGS_MISS;' )
-    P( f'        l0c2xx_status_must_retry <= tags_req0_status == TAGS_HIT_BEING_FILLED || tags_req0_status == TAGS_MISS_CANT_ALLOC;' )
+    P( f'        {c2u}_status_id <= {u2c}_d_id;' )
+    P( f'        {c2u}_status_is_hit <= tags_req0_status == TAGS_HIT;' )
+    P( f'        {c2u}_status_is_miss <= tags_req0_status == TAGS_MISS;' )
+    P( f'        {c2u}_status_must_retry <= tags_req0_status == TAGS_HIT_BEING_FILLED || tags_req0_status == TAGS_MISS_CANT_ALLOC;' )
     P( f'    end' )
     P( f'end' )
 
     P()
     P( f'// CACHED DATA' )
     P( f'//' )
-    for i in range(p['line_cnt']): V.reg( f'l0c_bits{i}', p['dat_w'] )
+    for i in range(p['line_cnt']): V.reg( f'{cache}_bits{i}', p['dat_w'] )
     V.always_at_posedge()
-    for i in range(p['line_cnt']): P( f'    if ( tags_fill_pvld && tags_fill_tag_i == {i} ) l0c_bits{i} <= tags_fill_dat;' )
+    for i in range(p['line_cnt']): P( f'    if ( tags_fill_pvld && tags_fill_tag_i == {i} ) {cache}_bits{i} <= tags_fill_dat;' )
     P( f'end' )
 
     P()
     P( f'// MEM REQ' )
     P( f'//' )
-    P( f'assign l0c2mem_p_pvld = tags_req0_pvld && tags_req0_status == TAGS_MISS;' )
-    P( f'assign l0c2mem_p_addr = tags_req0_addr[{req_addr_w-1}:{mem_subword_w}];' )
-    V.wirea( f'l0c2mem_p_subword_i', mem_subword_w, f'tags_req0_addr[{mem_subword_w-1}:0]' )
-    P( f'assign l0c2mem_p_tag_id = {{xx2l0c_d_id, l0c2mem_p_subword_i, tags__alloc_avail_chosen_i}};' )
+    P( f'assign {c2m}_p_pvld = tags_req0_pvld && tags_req0_status == TAGS_MISS;' )
+    P( f'assign {c2m}_p_addr = tags_req0_addr[{req_addr_w-1}:{mem_subword_w}];' )
+    V.wirea( f'{c2m}_p_subword_i', mem_subword_w, f'tags_req0_addr[{mem_subword_w-1}:0]' )
+    P( f'assign {c2m}_p_tag_id = {{{u2c}_d_id, {c2m}_p_subword_i, tags__alloc_avail_chosen_i}};' )
 
     P()
     P( f'// RETURNED DATA' )
     P( f'//' )
-    V.iface_reg( f'l0c2xx_dat', p['cache2unit_dat'], True, False )
-    V.wirea( f'l0c2xx_dat_pvld_p', 1, f'tags_fill_pvld || (tags_req0_pvld && tags_req0_status == TAGS_HIT)' )
-    P( f'assign tags_decr0_pvld = l0c2xx_dat_pvld_p || (tags_req0_pvld && tags_req0_status == TAGS_HIT_BEING_FILLED);' )
+    V.iface_reg( f'{c2u}_dat', p['cache2unit_dat'], True, False )
+    V.wirea( f'{c2u}_dat_pvld_p', 1, f'tags_fill_pvld || (tags_req0_pvld && tags_req0_status == TAGS_HIT)' )
+    P( f'assign tags_decr0_pvld = {c2u}_dat_pvld_p || (tags_req0_pvld && tags_req0_status == TAGS_HIT_BEING_FILLED);' )
     P( f'assign tags_decr0_tag_i = tags_fill_pvld ? tags_fill_tag_i : tags_req0__hit_i;' )
-    dats = [f'l0c_bits{i}' for i in range(p['line_cnt'])]
-    V.muxa( f'l0c_hit_dat', p['dat_w'], f'tags_req0__hit_i', dats )
+    dats = [f'{cache}_bits{i}' for i in range(p['line_cnt'])]
+    V.muxa( f'{cache}_hit_dat', p['dat_w'], f'tags_req0__hit_i', dats )
     V.always_at_posedge()
-    P( f'    l0c2xx_dat_pvld <= l0c2xx_dat_pvld_p;' )
-    P( f'    if ( l0c2xx_dat_pvld_p ) begin' )
-    P( f'        l0c2xx_dat_id <= tags_fill_pvld ? tags_fill_id : xx2l0c_d_id;' )
-    P( f'        l0c2xx_dat_dat <= tags_fill_pvld ? tags_fill_dat : l0c_hit_dat;' )
+    P( f'    {c2u}_dat_pvld <= {c2u}_dat_pvld_p;' )
+    P( f'    if ( {c2u}_dat_pvld_p ) begin' )
+    P( f'        {c2u}_dat_id <= tags_fill_pvld ? tags_fill_id : {u2c}_d_id;' )
+    P( f'        {c2u}_dat_dat <= tags_fill_pvld ? tags_fill_dat : {cache}_hit_dat;' )
     P( f'    end' )
     P( f'end' )
 
     P()
     P( f'// IDLE' )
     P( f'//' )
-    idle = '!xx2l0c_d_pvld && !l0c2mem_p_pvld && !mem2l0c_d_pvld && tags_idle'
-    P( f'assign l0c_idle = {idle};' )
+    idle = f'!{u2c}_d_pvld && !{c2m}_p_pvld && !{m2c}_d_pvld && tags_idle'
+    P( f'assign {cache}_idle = {idle};' )
 
     V.module_footer( module_name )
 
@@ -405,9 +409,29 @@ def tags( name, addr_w, tag_cnt, req_cnt, ref_cnt_max, incr_ref_cnt_max=1, decr_
 # Generate cache testbench
 #--------------------------------------------------------------------
 def make_tb( p, module_name, inst_name ):
+    check( p )
+
+    cache = p['cache_name']
+    unit  = p['unit_name']
+    mem   = p['mem_name']
+
+    u2c = f'{unit}2{cache}'
+    c2u = f'{cache}2{unit}'
+    c2m = f'{cache}2{mem}'
+    m2c = f'{mem}2{cache}'
+
+    req_id_cnt = p['req_id_cnt']
+    req_addr_w = p['req_addr_w']
+    dat_w = p['dat_w']
+    mem_addr_w = p['mem_addr_w']
+    mem_subword_cnt = p['mem_subword_cnt']
+    mem_subword_w = p['mem_subword_w']
+    tb_addr_cnt = p['tb_addr_cnt']
+    tb_addr_id_w = p['tb_addr_id_w']
+
     P(f'// Testbench for {module_name}.v with the following properties beyond those of the cache:' )
     P(f'// - issues a plusarg-selectable number of requests (default: 100)' )
-    P(f'// - randomly selects an address from {C.l0c_tb_addr_cnt} possible random addresses (to induce hits)' )
+    P(f'// - randomly selects an address from {tb_addr_cnt} possible random addresses (to induce hits)' )
     P(f'// - supplies a memory model that returns data that includes the memory address and line subword index for each line data' )
     P(f'// - checks that returned data from cache matches the expected data for the line' )
     P(f'// - randomly adds bubbles in the request stream' )
@@ -435,42 +459,42 @@ def make_tb( p, module_name, inst_name ):
     P() 
     P( f'// REQUESTS' )
     P( f'//' )
-    V.reg( 'req_in_use_mask', C.l0c_req_id_cnt )
-    V.reg( 'req_got_status_mask', C.l0c_req_id_cnt )
+    V.reg( 'req_in_use_mask', req_id_cnt )
+    V.reg( 'req_got_status_mask', req_id_cnt )
     addrs = []
     dats_expected = []
-    for i in range(C.l0c_tb_addr_cnt):
-        addr = S.rand_bits( C.l0c_addr_w )
-        V.wirea( f'addr{i}', C.l0c_addr_w, f'{C.l0c_addr_w}\'h{addr:01x}' )
-        V.wirea( f'dat_expected{i}', C.l0c_dat_w, f'{C.l0c_dat_w}\'h{addr:01x}' )
+    for i in range(tb_addr_cnt):
+        addr = S.rand_bits( req_addr_w )
+        V.wirea( f'addr{i}', req_addr_w, f'{req_addr_w}\'h{addr:01x}' )
+        V.wirea( f'dat_expected{i}', dat_w, f'{dat_w}\'h{addr:01x}' )
         addrs.append( f'addr{i}' )
         dats_expected.append( f'dat_expected{i}' )
     req_addr_is = []
-    for i in range(C.l0c_req_id_cnt):
-        V.reg( f'req{i}_addr_i', C.l0c_tb_addr_id_w )
+    for i in range(req_id_cnt):
+        V.reg( f'req{i}_addr_i', tb_addr_id_w )
         req_addr_is.append( f'req{i}_addr_i' )
     P()
-    V.iface_reg( f'xx2l0c_p', C.xx2l0c, True, False )
+    V.iface_reg( f'xx2l0c_p', p['unit2cache'], True, False )
     P( f'wire   xx2l0c_p_prdy = xx2l0c_prdy;' )
     P( f'assign xx2l0c_pvld = xx2l0c_p_pvld;' )
     P( f'assign xx2l0c_id = xx2l0c_p_id;' )
     P( f'assign xx2l0c_addr = xx2l0c_p_addr;' )
     V.reg( 'req_cnt', 32 )
-    V.wirea( 'req_elig', C.l0c_req_id_cnt, f'~req_in_use_mask' )
+    V.wirea( 'req_elig', req_id_cnt, f'~req_in_use_mask' )
     V.tb_randbits( 'should_delay_req_rand', 2 )
     V.wirea( 'should_delay_req', 1, f'should_delay_req_rand == 0' )
     V.wirea( 'can_issue_req', 1, f'req_cnt < req_cnt_max && !should_delay_req && (!xx2l0c_p_pvld || xx2l0c_p_prdy)' )
-    V.choose_eligible( 'req_id_chosen', f'req_elig', C.l0c_req_id_cnt, f'req_preferred', gen_preferred=True, adv_preferred='can_issue_req' )
+    V.choose_eligible( 'req_id_chosen', f'req_elig', req_id_cnt, f'req_preferred', gen_preferred=True, adv_preferred='can_issue_req' )
     P( f'// {V.vlint_off_width}' )
-    V.binary_to_one_hot( 'req_id_chosen',    C.l0c_req_id_cnt, 'req_issued_mask',            f'({V.reset_} && can_issue_req && req_elig_any_vld)' )
-    V.binary_to_one_hot( 'l0c2xx_status_id', C.l0c_req_id_cnt, 'req_status_mask',            f'l0c2xx_status_pvld' )
-    V.binary_to_one_hot( 'l0c2xx_status_id', C.l0c_req_id_cnt, 'req_status_is_hit_mask',     f'l0c2xx_status_pvld && l0c2xx_status_is_hit' )
-    V.binary_to_one_hot( 'l0c2xx_status_id', C.l0c_req_id_cnt, 'req_status_is_miss_mask',    f'l0c2xx_status_pvld && l0c2xx_status_is_miss' )
-    V.binary_to_one_hot( 'l0c2xx_status_id', C.l0c_req_id_cnt, 'req_status_must_retry_mask', f'l0c2xx_status_pvld && l0c2xx_status_must_retry' )
-    V.binary_to_one_hot( 'l0c2xx_dat_id',    C.l0c_req_id_cnt, 'rdat_mask',                  f'l0c2xx_dat_pvld' )
+    V.binary_to_one_hot( 'req_id_chosen',    req_id_cnt, 'req_issued_mask',            f'({V.reset_} && can_issue_req && req_elig_any_vld)' )
+    V.binary_to_one_hot( 'l0c2xx_status_id', req_id_cnt, 'req_status_mask',            f'l0c2xx_status_pvld' )
+    V.binary_to_one_hot( 'l0c2xx_status_id', req_id_cnt, 'req_status_is_hit_mask',     f'l0c2xx_status_pvld && l0c2xx_status_is_hit' )
+    V.binary_to_one_hot( 'l0c2xx_status_id', req_id_cnt, 'req_status_is_miss_mask',    f'l0c2xx_status_pvld && l0c2xx_status_is_miss' )
+    V.binary_to_one_hot( 'l0c2xx_status_id', req_id_cnt, 'req_status_must_retry_mask', f'l0c2xx_status_pvld && l0c2xx_status_must_retry' )
+    V.binary_to_one_hot( 'l0c2xx_dat_id',    req_id_cnt, 'rdat_mask',                  f'l0c2xx_dat_pvld' )
     P( f'// {V.vlint_on_width}' )
-    V.tb_randbits( 'req_addr_i', C.l0c_tb_addr_id_w )
-    V.muxa( 'req_addr', C.l0c_addr_w, 'req_addr_i', addrs )
+    V.tb_randbits( 'req_addr_i', tb_addr_id_w )
+    V.muxa( 'req_addr', req_addr_w, 'req_addr_i', addrs )
     P()
     V.always_at_posedge();
     P( f'    if ( !{V.reset_} ) begin' )
@@ -483,7 +507,7 @@ def make_tb( p, module_name, inst_name ):
     P( f'            xx2l0c_p_id <= req_id_chosen;' )
     P( f'            xx2l0c_p_addr <= req_addr;' )
     P( f'            req_cnt <= req_cnt + 1;' )
-    for i in range(C.l0c_req_id_cnt):
+    for i in range(req_id_cnt):
         P( f'            if ( req_id_chosen == {i} ) req{i}_addr_i <= req_addr_i;' )
     P( f'        end else if ( xx2l0c_p_pvld && xx2l0c_p_prdy ) begin' )
     P( f'            xx2l0c_p_pvld <= 0;' )
@@ -505,8 +529,8 @@ def make_tb( p, module_name, inst_name ):
     V.dassert( '(req_status_is_hit_mask & rdat_mask) === req_status_is_hit_mask', 'is_hit with no data' )
     V.dassert( '(req_status_is_miss_mask & rdat_mask) === 0', 'is_miss with data at same time' )
     V.dassert( '(rdat_mask & req_in_use_mask) === rdat_mask', 'dat returned for req not outstanding' )
-    V.muxa( 'rdat_req_addr_i', C.l0c_tb_addr_id_w, 'l0c2xx_dat_id', req_addr_is )
-    V.muxa( 'rdat_dat_expected', C.l0c_dat_w, 'rdat_req_addr_i', dats_expected )
+    V.muxa( 'rdat_req_addr_i', tb_addr_id_w, 'l0c2xx_dat_id', req_addr_is )
+    V.muxa( 'rdat_dat_expected', dat_w, 'rdat_req_addr_i', dats_expected )
     V.dassert( '!l0c2xx_dat_pvld || (l0c2xx_dat_dat === rdat_dat_expected)', 'unexpected dat returned' )
 
     P()
@@ -517,11 +541,11 @@ def make_tb( p, module_name, inst_name ):
     P( f'assign mem2l0c_pvld = l0c2mem_pvld && l0c2mem_prdy;' )
     P( f'assign mem2l0c_tag_id = l0c2mem_tag_id;' )
     dat_s = ''
-    extra_w = C.l0c_dat_w - C.mem_addr_w - C.l0c_subword_w
-    for i in range(C.l0c_subword_cnt):
+    extra_w = dat_w - mem_addr_w - mem_subword_w
+    for i in range(mem_subword_cnt):
         comma = ',' if dat_s != '' else ''
         extra = f'{extra_w}\'d0,' if extra_w > 0 else ''
-        dat_s = f'{extra}l0c2mem_addr,{C.l0c_subword_w}\'d{i}{comma}{dat_s}'
+        dat_s = f'{extra}l0c2mem_addr,{mem_subword_w}\'d{i}{comma}{dat_s}'
     P( f'assign mem2l0c_dat = {{{dat_s}}};' )
 
     P()
