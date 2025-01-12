@@ -287,15 +287,15 @@ params = {
  
     # optional:
     'is_read_only':  True,              # read-only cache?
-    'cache_name':    'cache',           # short name used in interfaces
-    'unit_name':     'unit',            # short name used in interfaces
-    'mem_name':      'mem',             # short name used in interfaces
+    'cache_name':    'cache',           # short name used in interfaces for cache itself
+    'unit_name':     'unit',            # short name used in interfaces for unit using the cache
+    'mem_name':      'mem',             # short name used in interfaces for memory subsystem
     'ref_cnt_max':   1,                 # max reference count per line
-    'tag_ram_kind':  'ra2',             # tag ram kind: ra2 or ff, default is ff for fully-associative
+    'tag_ram_kind':  'ra2',             # tag ram kind: ra2 or ff (default is ff for fully-associative)
     'data_ram_kind': 'ra2',             # data ram kind: ra2 or ff
     'req_cnt':       1,                 # number of request interfaces
-    'mem_dat_w':     64,                # memory width (must be a multiple of line_w)
-    'tb_addr_cnt':   <req_id_cnt/2>,    # for generated testbenches, number of unique addresses to use in requests
+    'mem_dat_w':     <line_w>,          # memory width (must be a integer multiple of line_w)
+    'tb_addr_cnt':   <req_id_cnt/2>,    # for generated testbench, number of unique addresses to use in requests
     }
 ```
 
