@@ -28,21 +28,21 @@ P = print
 
 def check( p ):
     if 'line_cnt' not in p: S.die( f'cache: line_cnt must be specified' )
-    if p['line_cnt'] < 1: S.die( f'cache: line_cnt({line_cnt}) must be >= 1' )
+    if p['line_cnt'] < 1: S.die( f'cache: line_cnt must be >= 1' )
     if 'assoc' not in p:    S.die( f'cache: assoc must be specified' )
     if p['assoc'] < 1 or p['assoc'] > p['line_cnt']: S.die( f'cache: assoc must be >= 1 and <= line_cnt' )
     if p['assoc'] != p['line_cnt']: S.die( f'cache: for now, cache must be fully-associative (assoc==line_cnt)')
     if 'line_w' not in p:   S.die( f'cache: line_w must be specified' )
-    if p['line_w'] < 1: S.die( f'cache: line_w({line_w}) must be >= 1' )
+    if p['line_w'] < 1: S.die( f'cache: line_w must be >= 1' )
     if 'req_id_w' not in p: S.die( f'cache: req_id_w must be specified' )
     if p['req_id_w'] < 1: S.die( f'cache: req_id_w({req_id_w} must be >= 1' )
     if 'req_addr_w' not in p:   S.die( f'cache: req_addr_w must be specified' )
-    if p['req_addr_w'] < 1: S.die( f'cache: req_addr_w({req_addr_w} must be >= 1' )
+    if p['req_addr_w'] < 1: S.die( f'cache: req_addr_w must be >= 1' )
 
     if 'is_read_only' not in p: p['is_read_only'] = False
     if not p['is_read_only']: S.die( f'cache: for now, is_read_only must be True' )
     if 'cache_name' not in p: p['cache_name'] = 'cache'
-    if 'req_name' not in p: p['req_name'] = 'req'
+    if 'unit_name' not in p: p['unit_name'] = 'unit'
     if 'mem_name' not in p: p['mem_name'] = 'mem'
     if 'tag_ram_kind' not in p: 
         if p['assoc'] == p['line_cnt']:
@@ -51,26 +51,27 @@ def check( p ):
             p['tag_ram_kind'] = 'ra2'
     if 'data_ram_kind' not in p: p['data_ram_kind'] = 'ff'
     if p['data_ram_kind'] != 'ff': S.die( f'cache: for now, data_ram_kind must be ff' )
-    if 'req_cnt' not in 'p': p['req_cnt'] = 1
-    if 'mem_dat_w' not in 'p': p['mem_dat_w'] = p['line_w']
+    if 'req_cnt' not in p: p['req_cnt'] = 1
+    if p['req_cnt'] != 1: S.die( f'cache: for now, req_cnt must be 1' )
+    if 'mem_dat_w' not in p: p['mem_dat_w'] = p['line_w']
     if p['mem_dat_w'] < p['line_w']: S.die( f'cache: mem_dat_w must be >= line_w' )
     if p['mem_dat_w'] % p['line_w'] != 0: S.die( f'cache: mem_dat_w must be a multiple of line_w' )
 
     # derived:
     p['line_id_w']            = V.log2( p['line_cnt'] )
     p['dat_w']                = p['line_w']                                # add req_subword_cnt at some point
+    p['mem_subword_cnt']      = int( p['mem_dat_w'] / p['line_w'] )
     p['mem_subword_w']        = V.log2( p['mem_subword_cnt'] )
-    p['mem_subword_cnt']      = int( p['mem_subword_w'] / p['line_w'] )
     p['mem_tag_id_w']         = p['req_id_w'] + p['mem_subword_w'] + p['line_id_w'] 
     p['mem_addr_w']           = p['req_addr_w'] - p['mem_subword_w']
-    p['req2cache']            = { 'id':                 p['req_id_w'],
+    p['unit2cache']           = { 'id':                 p['req_id_w'],
                                   'addr':               p['req_addr_w'] }
 
-    p['cache2req_status']     = { 'id':                 p['req_id_w'],
+    p['cache2unit_status']    = { 'id':                 p['req_id_w'],
                                   'is_hit':             1,                      # returning data soon
                                   'is_miss':            1,
                                   'must_retry':         1 }                     # hit-under-miss or can't allocate -> punt to client
-    p['cache2req_dat']        = { 'id':                 p['req_id_w'],
+    p['cache2unit_dat']       = { 'id':                 p['req_id_w'],
                                   'dat':                p['dat_w'] }
 
     p['cache2mem']            = { 'tag_id':             p['mem_tag_id_w'],
@@ -81,24 +82,31 @@ def check( p ):
 
 def inst( p, module_name, inst_name, do_decls ):
     check( p )
+
     cache = p['cache_name']
-    req = p['req_name']
+    unit  = p['unit_name']
+    mem   = p['mem_name']
+
+    u2c = f'{unit}2{cache}'
+    c2u = f'{cache}2{unit}'
+    c2m = f'{cache}2{mem}'
+    m2c = f'{mem}2{cache}'
 
     if do_decls: 
-        V.wire( f'l0c_idle', 1 )
-        V.iface_wire( f'xx2l0c', C.xx2l0c, True, True )
-        V.iface_wire( f'l0c2xx_status', C.l0c2xx_status, True, False )
-        V.iface_wire( f'l0c2xx_dat', C.l0c2xx_dat, True, False )
-        V.iface_wire( f'l0c2mem', C.l0c2mem, True, True )
-        V.iface_wire( f'mem2l0c', C.mem2l0c, True, False )
+        V.wire( f'{cache}_idle', 1 )
+        V.iface_wire( f'{u2c}', p['unit2cache'], True, True )
+        V.iface_wire( f'{c2u}_status', p['cache2unit_status'], True, False )
+        V.iface_wire( f'{c2u}_dat', p['cache2unit_dat'], True, False )
+        V.iface_wire( f'{c2m}', p['cache2mem'], True, True )
+        V.iface_wire( f'{m2c}', p['mem2cache'], True, False )
     P()
     P(f'{module_name} {inst_name}(' ) 
-    P(f'      .{V.clk}({V.clk}), .{V.reset_}({V.reset_}), .l0c_idle(l0c_idle)' )
-    V.iface_inst( f'xx2l0c', f'xx2l0c', C.xx2l0c, True, True )
-    V.iface_inst( f'l0c2xx_status', f'l0c2xx_status', C.l0c2xx_status, True, False )
-    V.iface_inst( f'l0c2xx_dat', f'l0c2xx_dat', C.l0c2xx_dat, True, False )
-    V.iface_inst( f'l0c2mem', f'l0c2mem', C.l0c2mem, True, True )
-    V.iface_inst( f'mem2l0c', f'mem2l0c', C.mem2l0c, True, False )
+    P(f'      .{V.clk}({V.clk}), .{V.reset_}({V.reset_}), .{cache}_idle({cache}_idle)' )
+    V.iface_inst( f'{u2c}', f'{u2c}', p['unit2cache'], True, True )
+    V.iface_inst( f'{c2u}_status', f'{c2u}_status', p['cache2unit_status'], True, False )
+    V.iface_inst( f'{c2u}_dat', f'{c2u}_dat', p['cache2unit_dat'], True, False )
+    V.iface_inst( f'{c2m}', f'{c2m}', p['cache2mem'], True, True )
+    V.iface_inst( f'{m2c}', f'{m2c}', p['mem2cache'], True, False )
     P(f'    );' )
 
 def make( p, module_name ):
@@ -180,27 +188,38 @@ def make( p, module_name ):
 # Generate cache module header
 #--------------------------------------------------------------------
 def header( p, module_name ):
+    check( p )
+
+    cache = p['cache_name']
+    unit  = p['unit_name']
+    mem   = p['mem_name']
+
+    u2c = f'{unit}2{cache}'
+    c2u = f'{cache}2{unit}'
+    c2m = f'{cache}2{mem}'
+    m2c = f'{mem}2{cache}'
+
     V.module_header_begin( module_name )
     V.input( f'{V.clk}', 1 )
     V.input( f'{V.reset_}', 1 )
-    V.output( f'l0c_idle', 1 )
-    V.iface_input( f'xx2l0c', C.xx2l0c, True )
-    V.iface_output( f'l0c2xx_status', C.l0c2xx_status, False )
-    V.iface_output( f'l0c2xx_dat', C.l0c2xx_dat, False )
-    V.iface_output( f'l0c2mem', C.l0c2mem, True )
-    V.iface_input( f'mem2l0c', C.mem2l0c, False )
+    V.output( f'{cache}_idle', 1 )
+    V.iface_input( f'{u2c}', p['unit2cache'], True )
+    V.iface_output( f'{c2u}_status', p['cache2unit_status'], False )
+    V.iface_output( f'{c2u}_dat', p['cache2unit_dat'], False )
+    V.iface_output( f'{c2m}', p['cache2mem'], True )
+    V.iface_input( f'{m2c}', p['mem2cache'], False )
     V.module_header_end()
-    V.wire( f'xx2l0c_d_prdy', 1 )
-    V.iface_stage( f'xx2l0c', f'xx2l0c_d', C.xx2l0c, 'pvld', 'prdy', full_handshake=True, do_dprint=False )
+    V.wire( f'{u2c}_d_prdy', 1 )
+    V.iface_stage( f'{u2c}', f'{u2c}_d', p['unit2cache'], 'pvld', 'prdy', full_handshake=True, do_dprint=False )
     P()
-    V.iface_wire( f'l0c2mem_p', C.l0c2mem, True )
-    V.iface_stage( f'l0c2mem_p', f'l0c2mem', C.l0c2mem, 'pvld', 'prdy', full_handshake=True, do_dprint=False )
-    V.iface_stage( f'mem2l0c', f'mem2l0c_d', C.mem2l0c, 'pvld', do_dprint=False )
-    V.iface_dprint( f'xx2l0c', C.xx2l0c, f'xx2l0c_pvld', f'xx2l0c_prdy' )
-    V.iface_dprint( f'l0c2xx_status', C.l0c2xx_status, f'l0c2xx_status_pvld' )
-    V.iface_dprint( f'l0c2xx_dat', C.l0c2xx_dat, f'l0c2xx_dat_pvld' )
-    V.iface_dprint( f'l0c2mem', C.l0c2mem, f'l0c2mem_pvld', f'l0c2mem_prdy' )
-    V.iface_dprint( f'mem2l0c', C.mem2l0c, f'mem2l0c_pvld' )
+    V.iface_wire( f'{c2m}_p', p['cache2mem'], True )
+    V.iface_stage( f'{c2m}_p', f'{c2m}', p['cache2mem'], 'pvld', 'prdy', full_handshake=True, do_dprint=False )
+    V.iface_stage( f'{m2c}', f'{m2c}_d', p['mem2cache'], 'pvld', do_dprint=False )
+    V.iface_dprint( f'{u2c}', p['unit2cache'], f'{u2c}_pvld', f'{u2c}_prdy' )
+    V.iface_dprint( f'{c2u}_status', p['cache2unit_status'], f'{c2u}_status_pvld' )
+    V.iface_dprint( f'{c2u}_dat', p['cache2unit_dat'], f'{c2u}_dat_pvld' )
+    V.iface_dprint( f'{c2m}', p['cache2mem'], f'{c2m}_pvld', f'{c2m}_prdy' )
+    V.iface_dprint( f'{m2c}', p['mem2cache'], f'{m2c}_pvld' )
   
 #--------------------------------------------------------------------
 # Generate cache tags handling.

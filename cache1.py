@@ -35,17 +35,17 @@ def reinit():
                'assoc':         2,              # fully associative (one set)
                'line_w':        32,             # width of line (dat)
                'req_id_w':      3,              # width of req_id in request
-               'req_addr_w':    32,             # width of virtual byte address in request
+               'req_addr_w':    30,             # width of virtual address in request
 
                # optional:
                'is_read_only':  True,           # read-only cache
                'cache_name':    'l0c',          # short name used in interfaces
-               'req_name':      'xx',           # short name used in interfaces
+               'unit_name':     'xx',           # short name used in interfaces
                'mem_name':      'mem',          # short name used in interfaces
                'tag_ram_kind':  'ff',           # tag ram in flops
                'data_ram_kind': 'ff',           # data ram in flops
                'req_cnt':       1,              # number of request interfaces
-               'mem_subword_cnt':1,             # number of subwords in memory dat
+               'mem_dat_w':     64,             # memory width
              }
 
 def inst_cache1( module_name, inst_name, do_decls ):
