@@ -42,6 +42,7 @@ def reinit():
                'cache_name':    'l0c',          # short name used in interfaces
                'unit_name':     'xx',           # short name used in interfaces
                'mem_name':      'mem',          # short name used in interfaces
+               'ref_cnt_max':   2,              # max reference count per line
                'tag_ram_kind':  'ff',           # tag ram in flops
                'data_ram_kind': 'ff',           # data ram in flops
                'req_cnt':       1,              # number of request interfaces

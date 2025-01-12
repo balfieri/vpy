@@ -59,6 +59,8 @@ def check( p ):
 
     # derived:
     p['line_id_w']            = V.log2( p['line_cnt'] )
+    if 'ref_cnt_max' not in p: p['ref_cnt_max'] = 1
+    if p['ref_cnt_max'] < 1: S.die( 'cache: ref_cnt_max must be >= 1' )
     p['dat_w']                = p['line_w']                                # add req_subword_cnt at some point
     p['mem_subword_cnt']      = int( p['mem_dat_w'] / p['line_w'] )
     p['mem_subword_w']        = V.log2( p['mem_subword_cnt'] )
@@ -111,28 +113,42 @@ def inst( p, module_name, inst_name, do_decls ):
 
 def make( p, module_name ):
     check( p )
+    cache = p['cache_name']
+    unit  = p['unit_name']
+    mem   = p['mem_name']
+
+    u2c = f'{unit}2{cache}'
+    c2u = f'{cache}2{unit}'
+    c2m = f'{cache}2{mem}'
+    m2c = f'{mem}2{cache}'
+
     header( p, module_name )
+
+    line_id_w = p['line_id_w']
+    req_addr_w = p['req_addr_w']
+    mem_tag_id_w = p['mem_tag_id_w']
+    mem_subword_w = p['mem_subword_w']
 
     P()
     P( f'// TAGS INPUTS' )
     P( f'//' )
     P( f'assign xx2l0c_d_prdy = l0c2mem_p_prdy && !mem2l0c_d_pvld;' )
     V.wirea( f'tags_req0_pvld', 1, f'xx2l0c_d_pvld && xx2l0c_d_prdy' )
-    V.wirea( f'tags_req0_addr', C.l0c_addr_w, f'xx2l0c_d_addr' )
+    V.wirea( f'tags_req0_addr', p['req_addr_w'], f'xx2l0c_d_addr' )
     V.wire( f'tags_decr0_pvld', 1 )
-    V.wire( f'tags_decr0_tag_i', C.l0c_slot_id_w )
+    V.wire( f'tags_decr0_tag_i', line_id_w )
     V.wirea( f'tags_fill_pvld', 1, f'mem2l0c_d_pvld' )
-    V.wirea( f'tags_fill_tag_i', C.l0c_slot_id_w, f'mem2l0c_d_tag_id[{C.l0c_slot_id_w-1}:0]' )
-    V.wirea( f'tags_fill_subword_i', C.l0c_subword_w, f'mem2l0c_d_tag_id[{C.l0c_subword_w+C.l0c_slot_id_w-1}:{C.l0c_slot_id_w}]' )
-    V.wirea( f'tags_fill_id', C.l0c_req_id_w, f'mem2l0c_d_tag_id[{C.l0c_mem_tag_id_w-1}:{C.l0c_subword_w+C.l0c_slot_id_w}]' )
-    V.mux_subword( f'tags_fill_dat', C.l0c_dat_w, f'tags_fill_subword_i', f'mem2l0c_d_dat', C.mem_dat_w )
+    V.wirea( f'tags_fill_tag_i', line_id_w, f'mem2l0c_d_tag_id[{line_id_w-1}:0]' )
+    V.wirea( f'tags_fill_subword_i', mem_subword_w, f'mem2l0c_d_tag_id[{mem_subword_w+line_id_w-1}:{line_id_w}]' )
+    V.wirea( f'tags_fill_id', p['req_id_w'], f'mem2l0c_d_tag_id[{mem_tag_id_w-1}:{mem_subword_w+line_id_w}]' )
+    V.mux_subword( f'tags_fill_dat', p['dat_w'], f'tags_fill_subword_i', f'mem2l0c_d_dat', p['mem_dat_w'] )
 
-    tags( f'tags', C.l0c_addr_w, C.l0c_slot_cnt, 1, C.l0c_ref_cnt_max )
+    tags( f'tags', p['req_addr_w'], p['line_cnt'], 1, p['ref_cnt_max'] )
 
     P()
     P( f'// TAGS STATUS' )
     P( f'//' )
-    V.iface_reg( f'l0c2xx_status', C.l0c2xx_status, True, False )
+    V.iface_reg( f'l0c2xx_status', p['cache2unit_status'], True, False )
     V.always_at_posedge()
     P( f'    l0c2xx_status_pvld <= tags_req0_pvld;' )
     P( f'    if ( tags_req0_pvld ) begin' )
@@ -146,28 +162,28 @@ def make( p, module_name ):
     P()
     P( f'// CACHED DATA' )
     P( f'//' )
-    for i in range(C.l0c_slot_cnt): V.reg( f'l0c_bits{i}', C.l0c_dat_w )
+    for i in range(p['line_cnt']): V.reg( f'l0c_bits{i}', p['dat_w'] )
     V.always_at_posedge()
-    for i in range(C.l0c_slot_cnt): P( f'    if ( tags_fill_pvld && tags_fill_tag_i == {i} ) l0c_bits{i} <= tags_fill_dat;' )
+    for i in range(p['line_cnt']): P( f'    if ( tags_fill_pvld && tags_fill_tag_i == {i} ) l0c_bits{i} <= tags_fill_dat;' )
     P( f'end' )
 
     P()
     P( f'// MEM REQ' )
     P( f'//' )
     P( f'assign l0c2mem_p_pvld = tags_req0_pvld && tags_req0_status == TAGS_MISS;' )
-    P( f'assign l0c2mem_p_addr = tags_req0_addr[{C.l0c_addr_w-1}:{C.l0c_subword_w}];' )
-    V.wirea( f'l0c2mem_p_subword_i', C.l0c_subword_w, f'tags_req0_addr[{C.l0c_subword_w-1}:0]' )
+    P( f'assign l0c2mem_p_addr = tags_req0_addr[{req_addr_w-1}:{mem_subword_w}];' )
+    V.wirea( f'l0c2mem_p_subword_i', mem_subword_w, f'tags_req0_addr[{mem_subword_w-1}:0]' )
     P( f'assign l0c2mem_p_tag_id = {{xx2l0c_d_id, l0c2mem_p_subword_i, tags__alloc_avail_chosen_i}};' )
 
     P()
     P( f'// RETURNED DATA' )
     P( f'//' )
-    V.iface_reg( f'l0c2xx_dat', C.l0c2xx_dat, True, False )
+    V.iface_reg( f'l0c2xx_dat', p['cache2unit_dat'], True, False )
     V.wirea( f'l0c2xx_dat_pvld_p', 1, f'tags_fill_pvld || (tags_req0_pvld && tags_req0_status == TAGS_HIT)' )
     P( f'assign tags_decr0_pvld = l0c2xx_dat_pvld_p || (tags_req0_pvld && tags_req0_status == TAGS_HIT_BEING_FILLED);' )
     P( f'assign tags_decr0_tag_i = tags_fill_pvld ? tags_fill_tag_i : tags_req0__hit_i;' )
-    dats = [f'l0c_bits{i}' for i in range(C.l0c_slot_cnt)]
-    V.muxa( f'l0c_hit_dat', C.l0c_dat_w, f'tags_req0__hit_i', dats )
+    dats = [f'l0c_bits{i}' for i in range(p['line_cnt'])]
+    V.muxa( f'l0c_hit_dat', p['dat_w'], f'tags_req0__hit_i', dats )
     V.always_at_posedge()
     P( f'    l0c2xx_dat_pvld <= l0c2xx_dat_pvld_p;' )
     P( f'    if ( l0c2xx_dat_pvld_p ) begin' )
