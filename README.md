@@ -276,6 +276,29 @@ def inst( params, inst_name, iname, oname, sigs, pvld='pvld', prdy='prdy', with_
 
 ## cache.py - cache generator
 
+```python
+params = { 
+    # required:
+    'line_cnt':      <count>            # number of lines in the cache
+    'assoc':         <associativity>    # ways per set (if line_cnt, then it's fully associative)
+    'line_w':        <bitwidth>,        # width of line (dat)
+    'req_id_w':      <bitwidth>,        # width of req_id in request
+    'req_addr_w':    <bitwidth>,        # width of virtual address in request
+ 
+    # optional:
+    'is_read_only':  True,              # read-only cache?
+    'cache_name':    'cache',           # short name used in interfaces
+    'unit_name':     'unit',            # short name used in interfaces
+    'mem_name':      'mem',             # short name used in interfaces
+    'ref_cnt_max':   1,                 # max reference count per line
+    'tag_ram_kind':  'ra2',             # tag ram kind: ra2 or ff, default is ff for fully-associative
+    'data_ram_kind': 'ra2',             # data ram kind: ra2 or ff
+    'req_cnt':       1,                 # number of request interfaces
+    'mem_dat_w':     64,                # memory width (must be a multiple of line_w)
+    'tb_addr_cnt':   <req_id_cnt/2>,    # for generated testbenches, number of unique addresses to use in requests
+    }
+```
+
 These generate a cache module or a corresponding testbench module, and should not be called from inside a module:
 
 ```python
@@ -312,7 +335,6 @@ def tags( name, addr_w, tag_cnt, req_cnt, ref_cnt_max, incr_ref_cnt_max=1, decr_
 
 # Things To Do
 
-* Merge guts of l0c.py into cache.py for start of general cache generator, then l0c.py and l0c_tags.py become simple wrappers
 * Add xbar.py generator
 * Add float.py generator
 

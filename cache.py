@@ -27,6 +27,7 @@ import C # temporary
 P = print
 
 def check( p ):
+    # required:
     if 'line_cnt' not in p: S.die( f'cache: line_cnt must be specified' )
     if p['line_cnt'] < 1: S.die( f'cache: line_cnt must be >= 1' )
     if 'assoc' not in p:    S.die( f'cache: assoc must be specified' )
@@ -39,17 +40,20 @@ def check( p ):
     if 'req_addr_w' not in p:   S.die( f'cache: req_addr_w must be specified' )
     if p['req_addr_w'] < 1: S.die( f'cache: req_addr_w must be >= 1' )
 
+    # optional
     if 'is_read_only' not in p: p['is_read_only'] = False
     if not p['is_read_only']: S.die( f'cache: for now, is_read_only must be True' )
     if 'cache_name' not in p: p['cache_name'] = 'cache'
     if 'unit_name' not in p: p['unit_name'] = 'unit'
     if 'mem_name' not in p: p['mem_name'] = 'mem'
+    if 'ref_cnt_max' not in p: p['ref_cnt_max'] = 1
+    if p['ref_cnt_max'] < 1: S.die( 'cache: ref_cnt_max must be >= 1' )
     if 'tag_ram_kind' not in p: 
         if p['assoc'] == p['line_cnt']:
             p['tag_ram_kind'] = 'ff'
         else:
             p['tag_ram_kind'] = 'ra2'
-    if 'data_ram_kind' not in p: p['data_ram_kind'] = 'ff'
+    if 'data_ram_kind' not in p: p['data_ram_kind'] = 'ra2'
     if p['data_ram_kind'] != 'ff': S.die( f'cache: for now, data_ram_kind must be ff' )
     if 'req_cnt' not in p: p['req_cnt'] = 1
     if p['req_cnt'] != 1: S.die( f'cache: for now, req_cnt must be 1' )
@@ -61,8 +65,6 @@ def check( p ):
     # derived:
     p['line_id_w']            = V.log2( p['line_cnt'] )
     p['req_id_cnt']           = 1 << p['req_id_w'] 
-    if 'ref_cnt_max' not in p: p['ref_cnt_max'] = 1
-    if p['ref_cnt_max'] < 1: S.die( 'cache: ref_cnt_max must be >= 1' )
     p['dat_w']                = p['line_w']                                # add req_subword_cnt at some point
     p['mem_subword_cnt']      = int( p['mem_dat_w'] / p['line_w'] )
     p['mem_subword_w']        = V.log2( p['mem_subword_cnt'] )
@@ -474,24 +476,24 @@ def make_tb( p, module_name, inst_name ):
         V.reg( f'req{i}_addr_i', tb_addr_id_w )
         req_addr_is.append( f'req{i}_addr_i' )
     P()
-    V.iface_reg( f'xx2l0c_p', p['unit2cache'], True, False )
-    P( f'wire   xx2l0c_p_prdy = xx2l0c_prdy;' )
-    P( f'assign xx2l0c_pvld = xx2l0c_p_pvld;' )
-    P( f'assign xx2l0c_id = xx2l0c_p_id;' )
-    P( f'assign xx2l0c_addr = xx2l0c_p_addr;' )
+    V.iface_reg( f'{u2c}_p', p['unit2cache'], True, False )
+    P( f'wire   {u2c}_p_prdy = {u2c}_prdy;' )
+    P( f'assign {u2c}_pvld = {u2c}_p_pvld;' )
+    P( f'assign {u2c}_id = {u2c}_p_id;' )
+    P( f'assign {u2c}_addr = {u2c}_p_addr;' )
     V.reg( 'req_cnt', 32 )
     V.wirea( 'req_elig', req_id_cnt, f'~req_in_use_mask' )
     V.tb_randbits( 'should_delay_req_rand', 2 )
     V.wirea( 'should_delay_req', 1, f'should_delay_req_rand == 0' )
-    V.wirea( 'can_issue_req', 1, f'req_cnt < req_cnt_max && !should_delay_req && (!xx2l0c_p_pvld || xx2l0c_p_prdy)' )
+    V.wirea( 'can_issue_req', 1, f'req_cnt < req_cnt_max && !should_delay_req && (!{u2c}_p_pvld || {u2c}_p_prdy)' )
     V.choose_eligible( 'req_id_chosen', f'req_elig', req_id_cnt, f'req_preferred', gen_preferred=True, adv_preferred='can_issue_req' )
     P( f'// {V.vlint_off_width}' )
-    V.binary_to_one_hot( 'req_id_chosen',    req_id_cnt, 'req_issued_mask',            f'({V.reset_} && can_issue_req && req_elig_any_vld)' )
-    V.binary_to_one_hot( 'l0c2xx_status_id', req_id_cnt, 'req_status_mask',            f'l0c2xx_status_pvld' )
-    V.binary_to_one_hot( 'l0c2xx_status_id', req_id_cnt, 'req_status_is_hit_mask',     f'l0c2xx_status_pvld && l0c2xx_status_is_hit' )
-    V.binary_to_one_hot( 'l0c2xx_status_id', req_id_cnt, 'req_status_is_miss_mask',    f'l0c2xx_status_pvld && l0c2xx_status_is_miss' )
-    V.binary_to_one_hot( 'l0c2xx_status_id', req_id_cnt, 'req_status_must_retry_mask', f'l0c2xx_status_pvld && l0c2xx_status_must_retry' )
-    V.binary_to_one_hot( 'l0c2xx_dat_id',    req_id_cnt, 'rdat_mask',                  f'l0c2xx_dat_pvld' )
+    V.binary_to_one_hot( f'req_id_chosen',   req_id_cnt, 'req_issued_mask',            f'({V.reset_} && can_issue_req && req_elig_any_vld)' )
+    V.binary_to_one_hot( f'{c2u}_status_id', req_id_cnt, 'req_status_mask',            f'{c2u}_status_pvld' )
+    V.binary_to_one_hot( f'{c2u}_status_id', req_id_cnt, 'req_status_is_hit_mask',     f'{c2u}_status_pvld && {c2u}_status_is_hit' )
+    V.binary_to_one_hot( f'{c2u}_status_id', req_id_cnt, 'req_status_is_miss_mask',    f'{c2u}_status_pvld && {c2u}_status_is_miss' )
+    V.binary_to_one_hot( f'{c2u}_status_id', req_id_cnt, 'req_status_must_retry_mask', f'{c2u}_status_pvld && {c2u}_status_must_retry' )
+    V.binary_to_one_hot( f'{c2u}_dat_id',    req_id_cnt, 'rdat_mask',                  f'{c2u}_dat_pvld' )
     P( f'// {V.vlint_on_width}' )
     V.tb_randbits( 'req_addr_i', tb_addr_id_w )
     V.muxa( 'req_addr', req_addr_w, 'req_addr_i', addrs )
@@ -499,54 +501,54 @@ def make_tb( p, module_name, inst_name ):
     V.always_at_posedge();
     P( f'    if ( !{V.reset_} ) begin' )
     P( f'        req_in_use_mask <= 0;' )
-    P( f'        xx2l0c_p_pvld <= 0;' )
+    P( f'        {u2c}_p_pvld <= 0;' )
     P( f'        req_cnt <= 0;' )
     P( f'    end else begin' )
     P( f'        if ( can_issue_req && req_elig_any_vld ) begin' )
-    P( f'            xx2l0c_p_pvld <= 1;' )
-    P( f'            xx2l0c_p_id <= req_id_chosen;' )
-    P( f'            xx2l0c_p_addr <= req_addr;' )
+    P( f'            {u2c}_p_pvld <= 1;' )
+    P( f'            {u2c}_p_id <= req_id_chosen;' )
+    P( f'            {u2c}_p_addr <= req_addr;' )
     P( f'            req_cnt <= req_cnt + 1;' )
     for i in range(req_id_cnt):
         P( f'            if ( req_id_chosen == {i} ) req{i}_addr_i <= req_addr_i;' )
-    P( f'        end else if ( xx2l0c_p_pvld && xx2l0c_p_prdy ) begin' )
-    P( f'            xx2l0c_p_pvld <= 0;' )
+    P( f'        end else if ( {u2c}_p_pvld && {u2c}_p_prdy ) begin' )
+    P( f'            {u2c}_p_pvld <= 0;' )
     P( f'        end' ) 
     P( f'        req_got_status_mask <= (req_got_status_mask & ~req_issued_mask) | req_status_mask;' )
     P( f'        req_in_use_mask     <= (req_in_use_mask & ~(rdat_mask | req_status_must_retry_mask)) | req_issued_mask;' )
-    P( f'        if ( l0c_idle && req_cnt === req_cnt_max && req_in_use_mask === 0 ) begin' )
+    P( f'        if ( {cache}_idle && req_cnt === req_cnt_max && req_in_use_mask === 0 ) begin' )
     P( f'            $display( "PASS" );' )
     P( f'            $finish;' )
     P( f'        end' )
     P( f'    end' )
     P( f'end' )
-    V.dassert( 'l0c_idle === 1 || (|req_in_use_mask) === 1', 'should be non-idle only if requests outstanding' )
-    V.rega( 'xx2l0c_d_pvld', 1, 'xx2l0c_pvld' )
-    V.rega( 'mem2l0c_d_pvld', 1, 'mem2l0c_pvld' )
-    V.dassert( 'l0c_idle === 0 || (xx2l0c_d_pvld == 0 && l0c2mem_pvld === 0 && mem2l0c_d_pvld === 0)', 'should be non-idle when interfaces are busy' )
-    V.dassert( '(req_status_mask & req_in_use_mask) === req_status_mask', 'status for req not outstanding' )
-    V.dassert( '(req_status_mask & req_got_status_mask) === 0', 'status received twice' )
-    V.dassert( '(req_status_is_hit_mask & rdat_mask) === req_status_is_hit_mask', 'is_hit with no data' )
-    V.dassert( '(req_status_is_miss_mask & rdat_mask) === 0', 'is_miss with data at same time' )
-    V.dassert( '(rdat_mask & req_in_use_mask) === rdat_mask', 'dat returned for req not outstanding' )
-    V.muxa( 'rdat_req_addr_i', tb_addr_id_w, 'l0c2xx_dat_id', req_addr_is )
-    V.muxa( 'rdat_dat_expected', dat_w, 'rdat_req_addr_i', dats_expected )
-    V.dassert( '!l0c2xx_dat_pvld || (l0c2xx_dat_dat === rdat_dat_expected)', 'unexpected dat returned' )
+    V.dassert( f'{cache}_idle === 1 || (|req_in_use_mask) === 1', 'should be non-idle only if requests outstanding' )
+    V.rega( f'{u2c}_d_pvld', 1, f'{u2c}_pvld' )
+    V.rega( f'{m2c}_d_pvld', 1, f'{m2c}_pvld' )
+    V.dassert( f'{cache}_idle === 0 || ({u2c}_d_pvld == 0 && {c2m}_pvld === 0 && {m2c}_d_pvld === 0)', 'should be non-idle when interfaces are busy' )
+    V.dassert( f'(req_status_mask & req_in_use_mask) === req_status_mask', 'status for req not outstanding' )
+    V.dassert( f'(req_status_mask & req_got_status_mask) === 0', 'status received twice' )
+    V.dassert( f'(req_status_is_hit_mask & rdat_mask) === req_status_is_hit_mask', 'is_hit with no data' )
+    V.dassert( f'(req_status_is_miss_mask & rdat_mask) === 0', 'is_miss with data at same time' )
+    V.dassert( f'(rdat_mask & req_in_use_mask) === rdat_mask', 'dat returned for req not outstanding' )
+    V.muxa( f'rdat_req_addr_i', tb_addr_id_w, f'{c2u}_dat_id', req_addr_is )
+    V.muxa( f'rdat_dat_expected', dat_w, f'rdat_req_addr_i', dats_expected )
+    V.dassert( f'!{c2u}_dat_pvld || ({c2u}_dat_dat === rdat_dat_expected)', 'unexpected dat returned' )
 
     P()
     P( f'// MEM RETURNS - just use addr to construct unique data for now' )
     P( f'//' )
-    V.tb_randbits( 'l0c2mem_prdy_p', 1 )
-    P( f'assign l0c2mem_prdy = !{V.reset_} || l0c2mem_prdy_p;' )
-    P( f'assign mem2l0c_pvld = l0c2mem_pvld && l0c2mem_prdy;' )
-    P( f'assign mem2l0c_tag_id = l0c2mem_tag_id;' )
+    V.tb_randbits( f'{c2m}_prdy_p', 1 )
+    P( f'assign {c2m}_prdy = !{V.reset_} || {c2m}_prdy_p;' )
+    P( f'assign {m2c}_pvld = {c2m}_pvld && {c2m}_prdy;' )
+    P( f'assign {m2c}_tag_id = {c2m}_tag_id;' )
     dat_s = ''
     extra_w = dat_w - mem_addr_w - mem_subword_w
     for i in range(mem_subword_cnt):
         comma = ',' if dat_s != '' else ''
         extra = f'{extra_w}\'d0,' if extra_w > 0 else ''
-        dat_s = f'{extra}l0c2mem_addr,{mem_subword_w}\'d{i}{comma}{dat_s}'
-    P( f'assign mem2l0c_dat = {{{dat_s}}};' )
+        dat_s = f'{extra}{c2m}_addr,{mem_subword_w}\'d{i}{comma}{dat_s}'
+    P( f'assign {m2c}_dat = {{{dat_s}}};' )
 
     P()
     P(f'endmodule // tb_{module_name}' )
