@@ -306,28 +306,15 @@ def make( params )
 def make_tb( name, params )
 ```
 
-This can be used to instantiate an existing cache module (if it was generated using make()):
+This can be used to instantiate an existing cache module. Because caches involve a lot of interfaces, it make sense to call inst() to get
+all the interface wires generated before using any interface:
 
 ```python
 def inst( params, inst_name, do_dprint=False )
 ```
 
-Because caches involve a lot of interfaces, inst() returns a dictionary containing the declared interfaces, so it
-makes sense to call inst() before using any interfaces:
-
-```python
-inst_info = {
-    reqs = [...],               # request interfaces
-    statuses = [...],           # status interfaces (caches are non-blocking)
-    wdats = [...],              # write-data interfaces (for writeable caches)
-    rdats = [...],              # read-data interfaces
-    mem_reqs = [...],           # memory request interfaces (currently always one)
-    mem_rdats = [...],          # memory read-data interfaces (currently always one)
-}
-```
-
-These are cache components that get inserted inside the current module. Normally, one does not use these directly, 
-but they provided for the rare cases where one would want to use them for a custom cache not supported by the generator:
+The following cache components get inserted inside the current module. Normally, one does not use these directly, 
+but they are provided for the rare cases where one would want to use them for a custom cache not supported by the generator:
 
 ```python
 def tags( name, addr_w, tag_cnt, req_cnt, ref_cnt_max, incr_ref_cnt_max=1, decr_req_cnt=0, can_always_alloc=False, custom_avails=False )
